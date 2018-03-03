@@ -1098,6 +1098,29 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   nvg.save();
   scope(exit) nvg.restore();
 
+  nvg.newPath();
+  //nvg.rect(_x+50, _y+80, 160, 140);
+  //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
+  nvg.ellipse(_x+150, _y+180, 120, 90);
+  nvg.clip();
+  //nvg.clipStroke();
+
+  scope(exit) {
+    nvg.newPath();
+    //nvg.rect(_x+50, _y+80, 160, 140);
+    //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
+    nvg.ellipse(_x+150, _y+180, 120, 90);
+    version(all) {
+      nvg.strokeWidth = 1;
+      nvg.strokeColor = NVGColor.yellow;
+      nvg.stroke();
+    } else {
+      nvg.fillColor = NVGColor.yellow;
+      nvg.fill();
+    }
+  }
+  //return;
+
   nvg.globalAlpha(bndMoving ? 0.4 : 0.9);
 
   nvg.bndBackground(_x-10.0f, _y-10.0f, _w, _h);

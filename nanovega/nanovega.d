@@ -1,4 +1,4 @@
-//
+//.
 // Copyright (c) 2013 Mikko Mononen memon@inside.org
 //
 // This software is provided 'as-is', without any express or implied
@@ -1105,7 +1105,7 @@ public struct NVGCompositeOperationState {
 }
 
 /// Mask combining more
-/// Group: masking
+/// Group: clipping
 public enum NVGClipMode {
   None, /// normal rendering (i.e. render path instead of modifying clip region)
   And, /// old mask will be masked with the current one (logical `AND` operation); this is the default mode for [clip]
@@ -5129,6 +5129,88 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recblockdraw) return;
 
   ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, NVGClipMode.None, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
+
+  // count triangles
+  foreach (int i; 0..ctx.cache.npaths) {
+    NVGpath* path = &ctx.cache.paths[i];
+    ctx.strokeTriCount += path.nstroke-2;
+    ++ctx.drawCallCount;
+  }
+}
+
+/// Sets current path as clipping region.
+/// Group: clipping
+public void clip (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.And) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+
+  if (aclipmode == NVGClipMode.None) return;
+  if (ctx.recblockdraw) return; //???
+
+  if (aclipmode == NVGClipMode.Replace) ctx.params.renderResetClip(ctx.params.userPtr);
+
+  /*
+  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Fill|(NVGPickKind.Fill<<16))) == NVGPickKind.Fill) {
+    ctx.pathPickRegistered |= NVGPickKind.Fill<<16;
+    ctx.currFillHitId = ctx.pathPickId;
+  }
+  */
+
+  nvg__prepareFill(ctx);
+
+  // apply global alpha
+  NVGPaint fillPaint = state.fill;
+  fillPaint.innerColor.a *= state.alpha;
+  fillPaint.outerColor.a *= state.alpha;
+
+  //ctx.appendCurrentPathToCache(ctx.recset, state.fill);
+
+  ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, aclipmode, &fillPaint, &state.scissor, ctx.fringeWidth, ctx.cache.bounds.ptr, ctx.cache.paths, ctx.cache.npaths, state.evenOddMode);
+
+  // count triangles
+  foreach (int i; 0..ctx.cache.npaths) {
+    NVGpath* path = &ctx.cache.paths[i];
+    ctx.fillTriCount += path.nfill-2;
+    ctx.fillTriCount += path.nstroke-2;
+    ctx.drawCallCount += 2;
+  }
+}
+
+/// Sets current path as clipping region.
+/// Group: clipping
+public alias clipFill = clip;
+
+/// Sets current path' stroke as clipping region.
+/// Group: clipping
+public void clipStroke (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.And) nothrow @trusted @nogc {
+  NVGstate* state = nvg__getState(ctx);
+
+  if (aclipmode == NVGClipMode.None) return;
+  if (ctx.recblockdraw) return; //???
+
+  if (aclipmode == NVGClipMode.Replace) ctx.params.renderResetClip(ctx.params.userPtr);
+
+  /*
+  if (ctx.pathPickId >= 0 && (ctx.pathPickRegistered&(NVGPickKind.Stroke|(NVGPickKind.Stroke<<16))) == NVGPickKind.Stroke) {
+    ctx.pathPickRegistered |= NVGPickKind.Stroke<<16;
+    ctx.currStrokeHitId = ctx.pathPickId;
+  }
+  */
+
+  nvg__prepareStroke(ctx);
+
+  NVGpathCache* cache = ctx.cache;
+
+  NVGPaint strokePaint = state.stroke;
+  strokePaint.innerColor.a *= cache.strokeAlphaMul;
+  strokePaint.outerColor.a *= cache.strokeAlphaMul;
+
+  // apply global alpha
+  strokePaint.innerColor.a *= state.alpha;
+  strokePaint.outerColor.a *= state.alpha;
+
+  //ctx.appendCurrentPathToCache(ctx.recset, state.stroke);
+
+  ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, aclipmode, &strokePaint, &state.scissor, ctx.fringeWidth, cache.strokeWidth, ctx.cache.paths, ctx.cache.npaths);
 
   // count triangles
   foreach (int i; 0..ctx.cache.npaths) {
@@ -11023,6 +11105,7 @@ enum GLMaskState {
   DontMask = -1,
   Uninitialized = 0,
   Initialized = 1,
+  JustCleared = 2,
 }
 
 struct GLNVGcontext {
@@ -11056,6 +11139,7 @@ struct GLNVGcontext {
   ubyte* uniforms;
   int cuniforms;
   int nuniforms;
+  NVGMatrix lastAffine;
 
   // cached state
   static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -11382,7 +11466,7 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
 
   // clear 'em all
   if (doclear) {
-    glClearColor(1, 1, 1, 1);
+    glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
   }
 
@@ -11404,7 +11488,7 @@ void glnvg__clearFBO (GLNVGcontext* gl, int fidx) nothrow @trusted @nogc {
   assert(gl.fbo[fidx] != 0);
   glnvg__bindTextureForced(gl, 0);
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[fidx]);
-  glClearColor(1, 1, 1, 1);
+  glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
   //glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -11424,6 +11508,7 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   glDisable(GL_SCISSOR_TEST);
   //glnvg__bindTexture(gl, gl.fboTex.ptr[sidx].ptr[0]);
   glUseProgram(0); // restore it!
+  glColor4f(1, 1, 1, 1);
   //glClearColor(1, 1, 1, 1);
   //glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
   enum x = 0;
@@ -11449,17 +11534,23 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
   // if we don't need "prepared" FBO, just take the last one which is ready
   if (!prepareIt) {
     //TODO: cache found index
-    if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.DontMask) return -1; // shortcut
+    if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.DontMask) {
+      // shortcut
+      //{ import core.stdc.stdio; printf("*** DON'T MASK (msp=%d)\n", gl.msp); }
+      return -1;
+    }
     int fboidx = -1;
-    foreach (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]; reverse) {
+    mainloop: foreach (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]; reverse) {
       final switch (mst) {
-        case GLMaskState.DontMask: fboidx = -1; break;
+        case GLMaskState.DontMask: fboidx = -1; break mainloop;
         case GLMaskState.Uninitialized: break;
-        case GLMaskState.Initialized: fboidx = cast(int)sp; break;
+        case GLMaskState.Initialized: fboidx = cast(int)sp; break mainloop;
+        case GLMaskState.JustCleared: assert(0, "NanoVega: `glnvg__getFBOClipTexture()` internal error");
       }
     }
     if (fboidx >= 0) {
       assert(gl.fbo[fboidx] != 0);
+      //{ import core.stdc.stdio; printf("CLIPTEX: %d!\n", fboidx); }
     }
     return fboidx;
   }
@@ -11468,6 +11559,7 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
   // or stop at first uninitialized one, and clear it
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.Initialized) {
     // shortcut
+    //{ import core.stdc.stdio; printf("00: CLIPTEX: %d!\n", gl.msp-1); }
     glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
     return gl.msp-1;
   }
@@ -11475,21 +11567,26 @@ int glnvg__getFBOClipTexture (GLNVGcontext* gl, bool prepareIt) nothrow @trusted
     final switch (gl.maskStack.ptr[sp]) {
       case GLMaskState.DontMask:
         // clear it
+        //{ import core.stdc.stdio; printf("01: CLIPTEX: %d (%d)!\n", gl.msp-1, sp); }
         if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
-        gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+        gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
         return gl.msp-1;
       case GLMaskState.Uninitialized: break; // do nothing
       case GLMaskState.Initialized:
         // i found her! copy to TOS
+        //{ import core.stdc.stdio; printf("02: CLIPTEX: %d (%d)!\n", gl.msp-1, sp); }
         glnvg__allocFBO(gl, gl.msp-1, false);
         glnvg__copyFBOToFrom(gl, gl.msp-1, sp);
         gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
         return gl.msp-1;
+      case GLMaskState.JustCleared: assert(0, "NanoVega: `glnvg__getFBOClipTexture()` internal error");
     }
   }
   // nothing was initialized, lol
+  //{ import core.stdc.stdio; printf("03: CLIPTEX: %d)!\n", gl.msp-1); }
+  if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[gl.msp-1]);
-  gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+  gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
   return gl.msp-1;
 }
 
@@ -11602,8 +11699,10 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
         //color = vec4(1, 1, 1, 1);
         //color = texture2D(clipTex, vec2(gl_FragCoord.x/viewPort.x, gl_FragCoord.y/viewPort.y));
         //color = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+
         vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
         if (clr.r == 0.0) discard;
+        //color = clr;
       }
       {
         // rendering
@@ -11645,29 +11744,6 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
       gl_FragColor = color;
     }
   };
-
-  /*
-  None, /// normal rendering (i.e. render path instead of modifying clip region)
-  And, /// old mask will be masked with the current one (logical `AND` operation); this is the default mode for [clip]
-  Or, /// new mask will be added to the current one (logical `OR` operation)
-  Xor, /// new mask will be logically `XOR`ed with the current one
-  Sub, /// "subtract" current path from mask
-  Replace, /// replace current mask
-
-  glEnable(GL_COLOR_LOGIC_OP)
-
-  And:
-    glLogicOp(GL_AND)
-  Or:
-    glLogicOp(GL_OR)
-    glLogicOp(GL_SET) // why not
-  Xor:
-    glLogicOp(GL_XOR)
-  Sub:
-    glLogicOp(GL_CLEAR)
-  Replace:
-    glLogicOp(GL_COPY)
-  */
 
   glnvg__checkError(gl, "init");
 
@@ -11913,6 +11989,7 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow
     version(all) {
       immutable int clipTexId = glnvg__getFBOClipTexture(gl, false); // don't create texture if it is not necessary
       if (clipTexId >= 0) {
+        //{ import core.stdc.stdio; printf("cliptex: %d\n", clipTexId); }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, gl.fboTex[clipTexId][0]);
@@ -11920,6 +11997,7 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow
         //glBindTexture(GL_TEXTURE_2D, 0);
         frag.doclip = 1;
       } else {
+        //{ import core.stdc.stdio; printf("NO cliptex: %d\n", clipTexId); }
         frag.doclip = 0;
       }
     } else {
@@ -11953,6 +12031,60 @@ void glnvg__setUniforms (GLNVGcontext* gl, int uniformOffset, int image) nothrow
   }
 }
 
+void glnvg__finishClip (GLNVGcontext* gl, NVGClipMode clipmode) nothrow @trusted @nogc {
+  assert(clipmode != NVGClipMode.None);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glDisable(GL_COLOR_LOGIC_OP);
+  glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+  glColor4f(1, 1, 1, 1);
+  glEnable(GL_BLEND);
+  glDisable(GL_STENCIL_TEST);
+  glEnable(GL_CULL_FACE);
+  glUseProgram(gl.shader.prog);
+  glnvg__restoreAffine(gl);
+}
+
+void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode clipmode) nothrow @trusted @nogc {
+  assert(clipmode != NVGClipMode.None);
+  GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE0);
+  immutable int clipTexId = glnvg__getFBOClipTexture(gl, true); // create texture if necessary
+  assert(clipTexId >= 0);
+  //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo[clipTexId]);
+  frag.doclip = 0;
+  // set logic op for clip
+  if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.JustCleared) {
+    // it is cleared to zero, we should just draw a path
+    //glLogicOp(GL_COPY);
+    glDisable(GL_COLOR_LOGIC_OP);
+    gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
+  } else {
+    glEnable(GL_COLOR_LOGIC_OP);
+    final switch (clipmode) {
+      case NVGClipMode.None: assert(0, "wtf?!");
+      case NVGClipMode.And: glLogicOp(GL_AND); break;
+      case NVGClipMode.Or: glLogicOp(GL_COPY); break; // GL_OR
+      case NVGClipMode.Xor: glLogicOp(GL_XOR); break;
+      case NVGClipMode.Sub: glLogicOp(GL_CLEAR); break;
+      case NVGClipMode.Replace: glLogicOp(GL_COPY); break;
+    }
+  }
+  glDisable(GL_COLOR_LOGIC_OP);
+  auto oldtype = frag.type;
+  //auto osthr = frag.strokeThr;
+  //frag.strokeThr = -1.0f;
+  frag.type = NSVG_SHADER_SIMPLE;
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
+  glnvg__bindTextureForced(gl, 0);
+  frag.type = oldtype;
+  //frag.strokeThr = osthr;
+  glDisable(GL_BLEND); // restore it!
+  glDisable(GL_CULL_FACE);
+}
+
 void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   gl.view.ptr[0] = cast(float)width;
@@ -11975,8 +12107,8 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   if (call.clipmode == NVGClipMode.None) {
     // Draw shapes
     glEnable(GL_STENCIL_TEST);
-    glnvg__stencilMask(gl, 0xffffffffU);
-    glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffffffffU);
+    glnvg__stencilMask(gl, 0xffU);
+    glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffU);
 
     glnvg__setUniforms(gl, call.uniformOffset, 0);
     glnvg__checkError(gl, "fill simple");
@@ -11999,14 +12131,14 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
     glnvg__checkError(gl, "fill fill");
 
     if (gl.flags&NVGContextFlag.Antialias) {
-      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffffffffU);
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffU);
       glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
       // Draw fringes
       foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
     }
 
     // Draw fill
-    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffffffffU);
+    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffU);
     glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
     if (call.evenOdd) {
       glDisable(GL_CULL_FACE);
@@ -12019,9 +12151,74 @@ void glnvg__fill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
 
     glDisable(GL_STENCIL_TEST);
   } else {
-    // create clip mask
-    //int cliptid = glnvg__getFBOClipTexture(gl, true);
-    //glUseProgram(gl.shader.prog);
+    //{ import core.stdc.stdio; printf("CLIPFILL: %d!\n", call.clipmode); }
+
+    glEnable(GL_STENCIL_TEST);
+    glnvg__stencilMask(gl, 0xffU);
+    glnvg__stencilFunc(gl, GL_ALWAYS, 0, 0xffU);
+
+    glnvg__setClipUniforms(gl, call.uniformOffset/*+gl.fragSize*/, call.clipmode); // this activates our FBO
+    glnvg__checkError(gl, "fillclip simple");
+
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    if (call.evenOdd) {
+      glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INVERT);
+      glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INVERT);
+    } else {
+      glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_INCR_WRAP);
+      glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_DECR_WRAP);
+    }
+    glDisable(GL_CULL_FACE);
+    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    glEnable(GL_CULL_FACE);
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+    //TODO: optimize with bounds?
+    glUseProgram(0);
+    glColor4f(1, 1, 1, 1);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x00, 0xff);
+    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    glBegin(GL_QUADS);
+      glVertex2i(0, 0);
+      glVertex2i(0, gl.fboHeight);
+      glVertex2i(gl.fboWidth, gl.fboHeight);
+      glVertex2i(gl.fboWidth, 0);
+    glEnd();
+
+    /+
+    //glnvg__setUniforms(gl, call.uniformOffset+gl.fragSize, call.image);
+    //glnvg__checkError(gl, "fill fill");
+    //FIXME: move to separate function!
+    {
+      GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize);
+      glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
+    }
+
+    if (gl.flags&NVGContextFlag.Antialias) {
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xffU);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+      // Draw fringes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
+
+    // Draw fill
+    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x0, 0xffU);
+    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    if (call.evenOdd) {
+      glDisable(GL_CULL_FACE);
+      glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+      //foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+      glEnable(GL_CULL_FACE);
+    } else {
+      glDrawArrays(GL_TRIANGLE_STRIP, call.triangleOffset, call.triangleCount);
+    }
+    +/
+
+    glDisable(GL_STENCIL_TEST);
+
+    glnvg__finishClip(gl, call.clipmode); // deactivate FBO, restore rendering state
   }
 }
 
@@ -12032,12 +12229,47 @@ void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nog
   if (call.clipmode == NVGClipMode.None) {
     glnvg__setUniforms(gl, call.uniformOffset, call.image);
     glnvg__checkError(gl, "convex fill");
+    if (call.evenOdd) glDisable(GL_CULL_FACE);
     foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
     if (gl.flags&NVGContextFlag.Antialias) {
       // Draw fringes
       foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
     }
+    if (call.evenOdd) glEnable(GL_CULL_FACE);
   } else {
+    //{ import core.stdc.stdio; printf("CLIPCONVEX: %d!\n", call.clipmode); }
+    glnvg__setClipUniforms(gl, call.uniformOffset, call.clipmode); // this activates our FBO
+    glnvg__checkError(gl, "clip convex fill");
+    if (call.evenOdd) glDisable(GL_CULL_FACE);
+
+    glEnable(GL_STENCIL_TEST);
+    glnvg__stencilMask(gl, 0xff);
+
+    glnvg__stencilFunc(gl, GL_EQUAL, 0x0, 0xff);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    if (gl.flags&NVGContextFlag.Antialias) {
+      // Draw fringes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
+
+    //TODO: optimize with bounds?
+    glDisable(GL_CULL_FACE);
+    //glUseProgram(0);
+    //glColor4f(1, 1, 1, 1);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x00, 0xff);
+    glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+    glBegin(GL_QUADS);
+      glVertex2i(0, 0);
+      glVertex2i(0, gl.fboHeight);
+      glVertex2i(gl.fboWidth, gl.fboHeight);
+      glVertex2i(gl.fboWidth, 0);
+    glEnd();
+
+    glnvg__finishClip(gl, call.clipmode); // deactivate FBO, restore rendering state
   }
 }
 
@@ -12081,6 +12313,66 @@ void glnvg__stroke (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
       foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
     }
   } else {
+    if (gl.flags&NVGContextFlag.StencilStrokes) {
+      glEnable(GL_STENCIL_TEST);
+      glnvg__stencilMask(gl, 0xff);
+
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x0, 0xff);
+      glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+      glnvg__setClipUniforms(gl, call.uniformOffset/*+gl.fragSize*/, call.clipmode);
+      glnvg__checkError(gl, "stroke fill 0");
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+
+      // Draw anti-aliased pixels.
+      //glnvg__setUniforms(gl, call.uniformOffset, call.image);
+      //FIXME: move to separate function!
+      /*
+      {
+        GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, call.uniformOffset);
+        glUniform4fv(gl.shader.loc[GLNVGuniformLoc.Frag], frag.UNIFORM_ARRAY_SIZE, &(frag.uniformArray.ptr[0].ptr[0]));
+      }
+      */
+
+      glDisable(GL_CULL_FACE);
+      //glUseProgram(0);
+      //glColor4f(1, 1, 1, 1);
+      glnvg__resetAffine(gl);
+      glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+      //glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
+      glnvg__stencilFunc(gl, GL_NOTEQUAL, 0x00, 0xff);
+      glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+      glBegin(GL_QUADS);
+        glVertex2i(0, 0);
+        glVertex2i(0, gl.fboHeight);
+        glVertex2i(gl.fboWidth, gl.fboHeight);
+        glVertex2i(gl.fboWidth, 0);
+      glEnd();
+      glEnable(GL_CULL_FACE);
+
+      /+
+      glnvg__stencilFunc(gl, GL_EQUAL, 0x00, 0xff);
+      glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+
+      // Clear stencil buffer.
+      glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+      glnvg__stencilFunc(gl, GL_ALWAYS, 0x0, 0xff);
+      glStencilOp(GL_ZERO, GL_ZERO, GL_ZERO);
+      glnvg__checkError(gl, "stroke fill 1");
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+      +/
+
+      glDisable(GL_STENCIL_TEST);
+
+      //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, strokeWidth, fringe, 1.0f-0.5f/255.0f);
+    } else {
+      glnvg__setClipUniforms(gl, call.uniformOffset, call.clipmode);
+      glnvg__checkError(gl, "stroke fill");
+      // Draw Strokes
+      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+    }
   }
 }
 
@@ -12092,6 +12384,24 @@ void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc
   } else {
   }
 }
+
+void glnvg__resetAffine (GLNVGcontext* gl) nothrow @trusted @nogc {
+  static immutable NVGMatrix affineIdentity = NVGMatrix.Identity;
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, affineIdentity.mat.ptr);
+  glnvg__checkError(gl, "affine");
+  glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, affineIdentity.mat.ptr+4);
+  glnvg__checkError(gl, "affine");
+  //glnvg__setUniforms(gl, call.uniformOffset, call.image);
+}
+
+void glnvg__restoreAffine (GLNVGcontext* gl) nothrow @trusted @nogc {
+  glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, gl.lastAffine.mat.ptr);
+  glnvg__checkError(gl, "affine");
+  glUniform2fv(gl.shader.loc[GLNVGuniformLoc.TTr], 1, gl.lastAffine.mat.ptr+4);
+  glnvg__checkError(gl, "affine");
+  //glnvg__setUniforms(gl, call.uniformOffset, call.image);
+}
+
 
 void glnvg__affine (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc {
   glUniform4fv(gl.shader.loc[GLNVGuniformLoc.TMat], 1, call.affine.mat.ptr);
@@ -12211,6 +12521,7 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   if (gl.ncalls > 0) {
     // Setup require GL state.
     glUseProgram(gl.shader.prog);
+    glColor4f(1, 1, 1, 1);
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -12268,6 +12579,8 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
     }
     glnvg__checkError(gl, "affine");
 
+    gl.lastAffine.identity;
+
     foreach (int i; 0..gl.ncalls) {
       GLNVGcall* call = &gl.calls[i];
       switch (call.type) {
@@ -12275,7 +12588,7 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
         case GLNVG_CONVEXFILL: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__convexFill(gl, call); break;
         case GLNVG_STROKE: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__stroke(gl, call); break;
         case GLNVG_TRIANGLES: glnvg__blendCompositeOperation(gl, call.blendFunc); glnvg__triangles(gl, call); break;
-        case GLNVG_AFFINE: glnvg__affine(gl, call); break;
+        case GLNVG_AFFINE: gl.lastAffine = call.affine; glnvg__affine(gl, call); break;
         // clip region management
         case GLNVG_PUSHCLIP:
           if (gl.msp >= gl.maskStack.length) assert(0, "NanoVega: mask stack overflow in OpenGL backend");
@@ -12407,6 +12720,7 @@ void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperatio
   call.type = GLNVG_FILL;
   call.evenOdd = evenOdd;
   call.clipmode = clipmode;
+  //if (clipmode != NVGClipMode.None) { import core.stdc.stdio; printf("CLIP!\n"); }
   call.blendFunc = glnvg__buildBlendFunc(compositeOperation);
   call.triangleCount = 4;
   call.pathOffset = glnvg__allocPaths(gl, npaths);
@@ -12445,6 +12759,7 @@ void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperatio
 
   // Setup uniforms for draw calls
   if (call.type == GLNVG_FILL) {
+    import core.stdc.string : memcpy;
     // Quad
     call.triangleOffset = offset;
     quad = &gl.verts[call.triangleOffset];
@@ -12458,10 +12773,12 @@ void glnvg__renderFill (void* uptr, NVGCompositeOperationState compositeOperatio
     // Simple shader for stencil
     frag = nvg__fragUniformPtr(gl, call.uniformOffset);
     memset(frag, 0, (*frag).sizeof);
+    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset), paint, scissor, fringe, fringe, -1.0f);
+    memcpy(nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), frag, (*frag).sizeof);
     frag.strokeThr = -1.0f;
     frag.type = NSVG_SHADER_SIMPLE;
     // Fill shader
-    glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, fringe, fringe, -1.0f);
+    //glnvg__convertPaint(gl, nvg__fragUniformPtr(gl, call.uniformOffset+gl.fragSize), paint, scissor, fringe, fringe, -1.0f);
   } else {
     call.uniformOffset = glnvg__allocFragUniforms(gl, 1);
     if (call.uniformOffset == -1) goto error;
