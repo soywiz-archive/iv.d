@@ -11787,7 +11787,11 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     #endif
 
     void main (void) {
-      vec4 color;
+      // clipping
+      if (doclip != 0) {
+        vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+        if (clr.r == 0.0) discard;
+      }
       float scissor = scissorMask(fpos);
       if (scissor <= 0.0) discard; //k8: is it really faster?
       #ifdef EDGE_AA
@@ -11796,47 +11800,41 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
       #else
       float strokeAlpha = 1.0;
       #endif
-      // clipping
-      if (doclip != 0) {
-        vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
-        if (clr.r == 0.0) discard;
-      }
-      {
-        // rendering
-        if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
-          color = innerCol;
-          // Combine alpha
-          color *= strokeAlpha*scissor;
-        } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
-          // Gradient
-          // Calculate gradient color using box gradient
-          vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
-          float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
-          color = mix(innerCol, outerCol, d);
-          // Combine alpha
-          color *= strokeAlpha*scissor;
-        } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
-          // Image
-          // Calculate color from texture
-          vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
-          color = texture2D(tex, pt);
-          if (texType == 1) color = vec4(color.xyz*color.w, color.w);
-          if (texType == 2) color = vec4(color.x);
-          // Apply color tint and alpha
-          color *= innerCol;
-          // Combine alpha
-          color *= strokeAlpha*scissor;
-        } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
-          // Stencil fill
-          color = vec4(1, 1, 1, 1);
-        } else if (type == 4) { /* NSVG_SHADER_IMG */
-          // Textured tris
-          color = texture2D(tex, ftcoord);
-          if (texType == 1) color = vec4(color.xyz*color.w, color.w);
-          if (texType == 2) color = vec4(color.x);
-          color *= scissor;
-          color *= innerCol; // Apply color tint
-        }
+      // rendering
+      vec4 color;
+      if (type == 0) { /* NSVG_SHADER_FILLCOLOR */
+        color = innerCol;
+        // Combine alpha
+        color *= strokeAlpha*scissor;
+      } else if (type == 1) { /* NSVG_SHADER_FILLGRAD */
+        // Gradient
+        // Calculate gradient color using box gradient
+        vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
+        float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
+        color = mix(innerCol, outerCol, d);
+        // Combine alpha
+        color *= strokeAlpha*scissor;
+      } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
+        // Image
+        // Calculate color from texture
+        vec2 pt = (paintMat*vec3(fpos, 1.0)).xy/extent;
+        color = texture2D(tex, pt);
+        if (texType == 1) color = vec4(color.xyz*color.w, color.w);
+        if (texType == 2) color = vec4(color.x);
+        // Apply color tint and alpha
+        color *= innerCol;
+        // Combine alpha
+        color *= strokeAlpha*scissor;
+      } else if (type == 3) { /* NSVG_SHADER_SIMPLE */
+        // Stencil fill
+        color = vec4(1, 1, 1, 1);
+      } else if (type == 4) { /* NSVG_SHADER_IMG */
+        // Textured tris
+        color = texture2D(tex, ftcoord);
+        if (texType == 1) color = vec4(color.xyz*color.w, color.w);
+        if (texType == 2) color = vec4(color.x);
+        color *= scissor;
+        color *= innerCol; // Apply color tint
       }
       gl_FragColor = color;
     }
