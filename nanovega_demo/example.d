@@ -17,16 +17,29 @@
 //
 module example;
 
+//import std.datetime;
+
 import arsd.simpledisplay;
 import arsd.color;
 import arsd.image;
 
+import iv.cmdcon;
 import iv.nanovega;
 import iv.nanovega.blendish;
 import iv.nanovega.perf;
 
 version(aliced) {
   version = nanovg_demo_msfonts;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+public class RepaintEvent {} ///
+
+__gshared RepaintEvent evRepaint;
+
+shared static this () {
+  evRepaint = new RepaintEvent();
 }
 
 
@@ -51,7 +64,6 @@ void fatal (string msg) {
 // ////////////////////////////////////////////////////////////////////////// //
 // demo modes
 bool blowup = false;
-bool screenshot = false;
 bool premult = false;
 
 
@@ -1095,51 +1107,59 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   float x = _x;
   float y = _y;
 
+  version(nanovega_debug_clipping) {
+    nvg.nvgClipDumpOn();
+    scope(exit) nvg.nvgClipDumpOff();
+    //{ import core.stdc.stdio; printf("==========================\n"); }
+  }
+
   nvg.save();
   scope(exit) nvg.restore();
 
-  nvg.newPath();
-  //nvg.rect(_x+50, _y+80, 160, 140);
-  //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
-  nvg.ellipse(_x+150, _y+180, 120, 90);
-  nvg.clip();
-  //nvg.clipStroke();
-
   version(all) {
-    nvg.newPath();
-    nvg.ellipse(_x+150, _y+180, 90, 120);
-    nvg.clip(NVGClipMode.Union);
-  }
-
-  version(all) {
-    nvg.save();
-    scope(exit) nvg.restore();
-
-    nvg.newPath();
-    nvg.ellipse(_x+150, _y+180, 60, 160);
-    nvg.clip(NVGClipMode.Xor);
-
-    /*
-    nvg.newPath();
-    nvg.rect(0, 0, 1000, 1000);
-    nvg.fillColor = NVGColor.yellow;
-    nvg.fill();
-    */
-  }
-
-  scope(exit) {
     nvg.newPath();
     //nvg.rect(_x+50, _y+80, 160, 140);
     //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
-    //nvg.ellipse(_x+150, _y+180, 120, 90);
-    nvg.rect(_x+30, _y+30, 400, 400);
-    version(none) {
-      nvg.strokeWidth = 1;
-      nvg.strokeColor = NVGColor.yellow;
-      //nvg.stroke();
-    } else {
+    nvg.ellipse(_x+150, _y+180, 120, 90);
+    nvg.clip();
+    //nvg.clipStroke();
+
+    version(all) {
+      nvg.newPath();
+      nvg.ellipse(_x+150, _y+180, 90, 120);
+      nvg.clip(NVGClipMode.Union);
+    }
+
+    version(all) {{
+      nvg.save();
+      scope(exit) nvg.restore();
+
+      nvg.newPath();
+      nvg.ellipse(_x+150, _y+180, 60, 160);
+      nvg.clip(NVGClipMode.Xor);
+
+      /*
+      nvg.newPath();
+      nvg.rect(0, 0, 1000, 1000);
       nvg.fillColor = NVGColor.yellow;
       nvg.fill();
+      */
+    }}
+
+    scope(exit) {
+      nvg.newPath();
+      //nvg.rect(_x+50, _y+80, 160, 140);
+      //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
+      //nvg.ellipse(_x+150, _y+180, 120, 90);
+      nvg.rect(_x+30, _y+30, 400, 400);
+      version(none) {
+        nvg.strokeWidth = 1;
+        nvg.strokeColor = NVGColor.yellow;
+        //nvg.stroke();
+      } else {
+        nvg.fillColor = NVGColor.yellow;
+        nvg.fill();
+      }
     }
   }
 
@@ -1256,15 +1276,43 @@ void main () {
 
   DemoData data;
   NVGContext nvg = null;
-  PerfGraph fps;
+  PerfGraph fpsStats;
 
   double mx = 0, my = 0;
   bool doQuit = false;
+  int fps = 30, prevfps = 0;
+  auto nextFrameTime = MonoTime.currTime;
 
   setOpenGLContextVersion(3, 0); // it's enough
 
   sdpyWindowClass = "NANOVEGA_EXAMPLE";
   auto sdwindow = new SimpleWindow(GWidth, GHeight, "NanoVega", OpenGlOptions.yes, Resizability.fixedSize);
+
+  void postRepaint (int tout=0) {
+    if (sdwindow !is null && !sdwindow.eventQueued!RepaintEvent) {
+      if (tout < 0) tout = 0;
+      sdwindow.postTimeout(evRepaint, tout);
+    }
+  }
+
+  void postNextFrame () {
+    if (sdwindow is null || sdwindow.eventQueued!RepaintEvent) return;
+    int tout = 0;
+    if (fps > 0) {
+      auto stt = MonoTime.currTime;
+      if (prevfps < 1) {
+        nextFrameTime = stt+(1000/fps).msecs;
+      } else if (nextFrameTime <= stt) {
+        while (nextFrameTime <= stt) nextFrameTime += (1000/fps).msecs;
+        //nextFrameTime = stt+(1000/fps).msecs;
+      } else {
+        tout = cast(int)((nextFrameTime-stt).total!"msecs");
+      }
+    }
+    //conwriteln("prevfps=", prevfps, "; fps=", fps, "; tout=", tout);
+    prevfps = fps;
+    sdwindow.postTimeout(evRepaint, tout);
+  }
 
   version(X11) sdwindow.closeQuery = delegate () { doQuit = true; };
 
@@ -1278,8 +1326,6 @@ void main () {
 
   auto stt = MonoTime.currTime;
   auto prevt = MonoTime.currTime;
-  auto curt = prevt;
-  float dt = 0, secs = 0;
 
   sdwindow.visibleForTheFirstTime = delegate () {
     sdwindow.vsync = false;
@@ -1288,45 +1334,84 @@ void main () {
     if (nvg is null) fatal("cannot init NanoVega");
     if (!nvg.loadDemoData(data)) fatal("cannot load demo data");
 
-    fps = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
+    fpsStats = new PerfGraph("Frame Time", PerfGraph.Style.FPS, "sans");
   };
 
+  int frc = 0, totalFrames = 0;
+
   sdwindow.redrawOpenGlScene = delegate () {
-    // timers
-    prevt = curt;
-    curt = MonoTime.currTime;
-    secs = cast(double)((curt-stt).total!"msecs")/1000.0;
-    dt = cast(double)((curt-prevt).total!"msecs")/1000.0;
+    if (fps != 0) postNextFrame();
 
     // Update and render
     glViewport(0, 0, sdwindow.width, sdwindow.height);
     if (premult) glClearColor(0, 0, 0, 0); else glClearColor(0.3f, 0.3f, 0.32f, 1.0f);
     glClear(glNVGClearFlags);
 
+    // timers
+    auto curt = MonoTime.currTime;
+    double dt = cast(double)((curt-prevt).total!"msecs")/1000.0;
+    double secs = cast(double)((curt-stt).total!"msecs")/1000.0;
+    prevt = curt;
+
+    //{ import core.stdc.stdio; printf("frame time: %d\n", cast(int)(dt*1000)); }
+
     if (nvg !is null) {
-      if (fps !is null) fps.update(dt);
-      nvg.beginFrame(GWidth, GHeight, 1);
+      ++totalFrames;
+      if (fpsStats !is null) fpsStats.update(dt);
+      nvg.beginFrame(GWidth, GHeight);
+      scope(exit) nvg.endFrame();
       renderDemo(nvg, mx, my, GWidth, GHeight, secs, blowup, data);
-      if (fps !is null) fps.render(nvg, 5, 5);
-      nvg.endFrame();
+      if (fpsStats !is null) fpsStats.render(nvg, 5, 5);
+
+      ++frc;
+      if (frc >= 60) {
+        /*
+        import core.stdc.stdio : snprintf;
+        frc = 0;
+        char[128] buf = void;
+        auto t = buf[0..snprintf(buf.ptr, buf.length, "NanoVega: %d msecs per frame", cast(int)(secs*1000/totalFrames))].idup;
+        sdwindow.title = t;
+        */
+      }
     }
   };
 
-  sdwindow.eventLoop(1000/60,
+  sdwindow.addEventListener((RepaintEvent evt) {
+    sdwindow.redrawOpenGlSceneNow();
+  });
+
+  sdwindow.eventLoop(0,
     delegate () {
+      /*
       if (sdwindow.closed) return;
       if (doQuit) { sdwindow.close(); return; }
       sdwindow.redrawOpenGlSceneNow();
+      */
     },
 
     delegate (KeyEvent event) {
       if (sdwindow.closed) return;
+      scope(exit) if (event.pressed) postNextFrame();
       if (event == "D-*-Q" || event == "D-Escape") { sdwindow.close(); return; }
-      if (event == "D-Space") { blowup = !blowup; return; }
+      if (event == "D-T") { blowup = !blowup; return; }
       if (event == "D-P") { premult = !premult; return; }
+      int newfps = -666;
+      if (event == "D-1") newfps = 10;
+      if (event == "D-2") newfps = 20;
+      if (event == "D-3") newfps = 30;
+      if (event == "D-6") newfps = 60;
+      if (event == "D-9") newfps = 120;
+      if (event == "D-0") newfps = -1;
+      if (event == "D-X") newfps = 0;
+      if (newfps == -666) return;
+      fps = newfps;
+      conwriteln("FPS: ", fps);
+      totalFrames = frc = 0;
     },
 
     delegate (MouseEvent event) {
+      scope(exit) postNextFrame();
+
       mx = event.x;
       my = event.y;
 
