@@ -20,11 +20,13 @@ __gshared OPLPlayer player;
 __gshared short[4096] smpbuf;
 __gshared uint smpbufpos;
 
+__gshared float amp = 1.0f;
+
 
 void playbuf () {
   if (smpbufpos == 0) return;
   foreach (ref short v; smpbuf[0..smpbufpos]) {
-    int n = v*2;
+    int n = cast(int)(v*amp);
     if (n < short.min) n = short.min;
     if (n > short.max) n = short.max;
     v = cast(short)n;
@@ -60,6 +62,9 @@ void main (string[] args) {
     else if (a.length > 2 && a[0..2] == "-w") {
       if (outwavname !is null) assert(0, "too many output .wav filenames");
       outwavname = a[2..$];
+    } else if (a.length > 2 && a[0..2] == "-a") {
+      import std.conv : to;
+      amp = a[2..$].to!float;
     } else if (a[0] == '-') assert(0, "invalid option: '"~a~"'");
     else {
       if (filename !is null) assert(0, "too many file names");
@@ -78,7 +83,7 @@ void main (string[] args) {
     if (outwavname.length == 0) alsaOpen(2);
     scope(exit) alsaClose();
 
-    conwriteln("OPL", (useOPL3 ? "3" : "2"), ": ", (outwavname.length ? "writing .wav from" : "playing"), " '", filename, "'...");
+    conwriteln("OPL", (useOPL3 ? "3" : "2"), " (amp:", amp, "): ", (outwavname.length ? "writing .wav from" : "playing"), " '", filename, "'...");
     ubyte[] fdata = new ubyte[](flen);
     fl.rawReadExact(fdata);
     if (!player.load(fdata)) assert(0, "cannot load song");
