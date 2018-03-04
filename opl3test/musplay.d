@@ -75,7 +75,7 @@ void main (string[] args) {
     auto fl = VFile(filename);
     uint flen = cast(uint)fl.size;
     assert(flen > 0);
-    if (outwavname.length) alsaOpen(2);
+    if (outwavname.length == 0) alsaOpen(2);
     scope(exit) alsaClose();
 
     conwriteln("OPL", (useOPL3 ? "3" : "2"), ": ", (outwavname.length ? "writing .wav from" : "playing"), " '", filename, "'...");
