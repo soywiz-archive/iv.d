@@ -293,6 +293,10 @@ The following code illustrates the OpenGL state touched by the rendering code:
     [restore] NanoVega functions. You can combine clip paths with various logic
     operations, see [NVGClipMode].
 
+    Note that both [clip] and [clipStroke] are ignoring scissoring (i.e. clip mask
+    is created as if there was no scissor set). Actual rendering is affected by
+    scissors, though.
+
   text_api =
     ## Text
 
