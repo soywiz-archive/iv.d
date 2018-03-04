@@ -2655,6 +2655,11 @@ void nvg__setPaintColor() (ref NVGPaint p, in auto ref NVGColor color) nothrow @
 // ////////////////////////////////////////////////////////////////////////// //
 // State handling
 
+version(nanovega_debug_clipping) {
+  public void nvgClipDumpOn (NVGContext ctx) { glnvg__clipDebugDump(ctx.params.userPtr, true); }
+  public void nvgClipDumpOff (NVGContext ctx) { glnvg__clipDebugDump(ctx.params.userPtr, false); }
+}
+
 /** Pushes and saves the current render state into a state stack.
  * A matching [restore] must be used to restore the state.
  * Returns `false` if state stack overflowed.
@@ -11073,6 +11078,7 @@ public uint glNVGClearFlags () pure nothrow @safe @nogc {
 private:
 
 version = nanovega_shared_stencil;
+//version = nanovega_debug_clipping;
 
 enum GLNVGuniformLoc {
   ViewSize,
@@ -11128,6 +11134,8 @@ enum /*GLNVGcallType*/ {
   GLNVG_PUSHCLIP,
   GLNVG_POPCLIP,
   GLNVG_RESETCLIP,
+  GLNVG_CLIP_DDUMP_ON,
+  GLNVG_CLIP_DDUMP_OFF,
 }
 
 struct GLNVGcall {
@@ -11203,7 +11211,7 @@ struct GLNVGcontext {
   int fboWidth, fboHeight;
   GLMaskState[NVG_MAX_STATES] maskStack;
   int msp; // mask stack pointer; starts from `0`; points to next free item; see below for logic description
-  int lastClipTextureId;
+  int lastClipFBO; // -666: cache invalidated; -1: don't mask
   int lastClipUniOfs;
   bool doClipUnion; // specal mode
   GLNVGshader shaderFillFBO;
@@ -11353,6 +11361,13 @@ void glnvg__dumpProgramError (GLuint prog, const(char)* name) nothrow @trusted @
   fprintf(stderr, "Program %s error:\n%s\n", name, str.ptr);
 }
 
+void glnvg__resetError(bool force=false) (GLNVGcontext* gl) nothrow @trusted @nogc {
+  static if (!force) {
+    if ((gl.flags&NVGContextFlag.Debug) == 0) return;
+  }
+  glGetError();
+}
+
 void glnvg__checkError(bool force=false) (GLNVGcontext* gl, const(char)* str) nothrow @trusted @nogc {
   GLenum err;
   static if (!force) {
@@ -11455,10 +11470,9 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   assert(gl.fboWidth > 0);
   assert(gl.fboHeight > 0);
 
-  //{ import core.stdc.stdio; printf("fidx=%d; fbo=%u\n", fidx, gl.fbo.ptr[fidx]); }
   if (gl.fbo.ptr[fidx] != 0) return false; // nothing to do, this FBO is already initialized
 
-  glGetError();
+  glnvg__resetError(gl);
 
   // allocate FBO object
   GLuint fbo = 0;
@@ -11543,6 +11557,8 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
 
   static if (NANOVG_GL_USE_STATE_FILTER) glBindTexture(GL_TEXTURE_2D, gl.boundTexture);
 
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): created with index %d\n", gl.msp-1, fidx); }
+
   return true;
 }
 
@@ -11555,6 +11571,7 @@ void glnvg__clearFBO (GLNVGcontext* gl, int fidx) nothrow @trusted @nogc {
   glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[fidx]);
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT|GL_STENCIL_BUFFER_BIT);
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): cleared with index %d\n", gl.msp-1, fidx); }
 }
 
 // will not unbind buffer
@@ -11575,7 +11592,7 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
   return;
   */
 
-  //{ import core.stdc.stdio; printf("copy from %d to %d\n", sidx, didx); }
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): copy FBO: %d -> %d\n", gl.msp-1, sidx, didx); }
 
   glUseProgram(gl.shaderCopyFBO.prog);
 
@@ -11604,54 +11621,54 @@ void glnvg__copyFBOToFrom (GLNVGcontext* gl, int didx, int sidx) nothrow @truste
 }
 
 void glnvg__resetFBOClipTextureCache (GLNVGcontext* gl) nothrow @trusted @nogc {
-  if (gl.lastClipTextureId > 0) {
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): texture cache invalidated (%d)\n", gl.msp-1, gl.lastClipFBO); }
+  /*
+  if (gl.lastClipFBO >= 0) {
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
   }
-  gl.lastClipTextureId = -1;
+  */
+  gl.lastClipFBO = -666;
 }
 
 void glnvg__setFBOClipTexture (GLNVGcontext* gl, GLNVGfragUniforms* frag) nothrow @trusted @nogc {
   //assert(gl.msp > 0 && gl.msp <= gl.maskStack.length);
-  if (gl.lastClipTextureId >= 0) {
+  if (gl.lastClipFBO != -666) {
     // cached
-    frag.doclip = (gl.lastClipTextureId > 0 ? 1.0f : 0.0f);
+    version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): cached (%d)\n", gl.msp-1, gl.lastClipFBO); }
+    frag.doclip = (gl.lastClipFBO >= 0 ? 1 : 0);
     return;
   }
 
   // no cache
   int fboidx = -1;
-  if (gl.maskStack.ptr[gl.msp-1] != GLMaskState.DontMask) {
-    // alas, no shortcut
-    //{ import core.stdc.stdio; printf("*** DON'T MASK (msp=%d)\n", gl.msp); }
-    mainloop: foreach_reverse (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]/*; reverse*/) {
-      final switch (mst) {
-        case GLMaskState.DontMask: fboidx = -1; break mainloop;
-        case GLMaskState.Uninitialized: break;
-        case GLMaskState.Initialized: fboidx = cast(int)sp; break mainloop;
-        case GLMaskState.JustCleared: assert(0, "NanoVega: `glnvg__setFBOClipTexture()` internal error");
-      }
+  mainloop: foreach_reverse (immutable sp, GLMaskState mst; gl.maskStack.ptr[0..gl.msp]/*; reverse*/) {
+    final switch (mst) {
+      case GLMaskState.DontMask: fboidx = -1; break mainloop;
+      case GLMaskState.Uninitialized: break;
+      case GLMaskState.Initialized: fboidx = cast(int)sp; break mainloop;
+      case GLMaskState.JustCleared: assert(0, "NanoVega: `glnvg__setFBOClipTexture()` internal error");
     }
   }
 
-  int oldtid = gl.lastClipTextureId;
-
   if (fboidx < 0) {
     // don't mask
-    gl.lastClipTextureId = 0;
+    gl.lastClipFBO = -1;
     frag.doclip = 0;
   } else {
     // do masking
     assert(gl.fbo.ptr[fboidx] != 0);
-    gl.lastClipTextureId = gl.fboTex.ptr[fboidx].ptr[0];
-    assert(gl.lastClipTextureId > 0);
+    gl.lastClipFBO = fboidx;
     frag.doclip = 1;
   }
 
-  if (gl.lastClipTextureId != oldtid) {
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): new cache (new:%d)\n", gl.msp-1, gl.lastClipFBO); }
+
+  if (gl.lastClipFBO >= 0) {
+    assert(gl.fboTex.ptr[gl.lastClipFBO].ptr[0]);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, gl.lastClipTextureId);
+    glBindTexture(GL_TEXTURE_2D, gl.fboTex.ptr[gl.lastClipFBO].ptr[0]);
     glActiveTexture(GL_TEXTURE0);
   }
 }
@@ -11660,13 +11677,13 @@ void glnvg__setFBOClipTexture (GLNVGcontext* gl, GLNVGfragUniforms* frag) nothro
 int glnvg__generateFBOClipTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
   assert(gl.msp > 0 && gl.msp <= gl.maskStack.length);
   // reset cache
-  glnvg__resetFBOClipTextureCache(gl);
+  //glnvg__resetFBOClipTextureCache(gl);
   // we need initialized FBO, even for "don't mask" case
   // for this, look back in stack, and either copy initialized FBO,
   // or stop at first uninitialized one, and clear it
   if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.Initialized) {
     // shortcut
-    //{ import core.stdc.stdio; printf("00: CLIPTEX: %d!\n", gl.msp-1); }
+    version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): generation of new texture is skipped (already initialized)\n", gl.msp-1); }
     glBindFramebuffer(GL_FRAMEBUFFER, gl.fbo.ptr[gl.msp-1]);
     return gl.msp-1;
   }
@@ -11674,14 +11691,14 @@ int glnvg__generateFBOClipTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
     final switch (gl.maskStack.ptr[sp]) {
       case GLMaskState.DontMask:
         // clear it
-        //{ import core.stdc.stdio; printf("01: CLIPTEX: %d (%d)!\n", gl.msp-1, sp); }
+        version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): generating new clean texture\n", gl.msp-1); }
         if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
         gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
         return gl.msp-1;
       case GLMaskState.Uninitialized: break; // do nothing
       case GLMaskState.Initialized:
         // i found her! copy to TOS
-        //{ import core.stdc.stdio; printf("02: CLIPTEX: %d (%d)!\n", gl.msp-1, sp); }
+        version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): copying texture from %d\n", gl.msp-1, cast(int)sp); }
         glnvg__allocFBO(gl, gl.msp-1, false);
         glnvg__copyFBOToFrom(gl, gl.msp-1, sp);
         gl.maskStack.ptr[gl.msp-1] = GLMaskState.Initialized;
@@ -11690,7 +11707,7 @@ int glnvg__generateFBOClipTexture (GLNVGcontext* gl) nothrow @trusted @nogc {
     }
   }
   // nothing was initialized, lol
-  //{ import core.stdc.stdio; printf("03: CLIPTEX: %d)!\n", gl.msp-1); }
+  version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): generating new clean texture (first one)\n", gl.msp-1); }
   if (!glnvg__allocFBO(gl, gl.msp-1)) glnvg__clearFBO(gl, gl.msp-1);
   gl.maskStack.ptr[gl.msp-1] = GLMaskState.JustCleared;
   return gl.msp-1;
@@ -11715,6 +11732,14 @@ void glnvg__renderResetClip (void* uptr) nothrow @trusted @nogc {
   GLNVGcall* call = glnvg__allocCall(gl);
   if (call is null) return;
   call.type = GLNVG_RESETCLIP;
+}
+
+void glnvg__clipDebugDump (void* uptr, bool doit) nothrow @trusted @nogc {
+  version(nanovega_debug_clipping) {
+    GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
+    GLNVGcall* call = glnvg__allocCall(gl);
+    call.type = (doit ? GLNVG_CLIP_DDUMP_ON : GLNVG_CLIP_DDUMP_OFF);
+  }
 }
 
 bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
@@ -12166,17 +12191,21 @@ void glnvg__finishClip (GLNVGcontext* gl, NVGClipMode clipmode) nothrow @trusted
   glDisable(GL_STENCIL_TEST);
   glEnable(GL_CULL_FACE);
   glUseProgram(gl.shader.prog);
+
+  // set current FBO as used one
+  assert(gl.msp > 0 && gl.fbo.ptr[gl.msp-1] > 0 && gl.fboTex.ptr[gl.msp-1].ptr[0] > 0);
+  if (gl.lastClipFBO != gl.msp-1) {
+    version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): new cache from changed mask (old:%d; new:%d)\n", gl.msp-1, gl.lastClipFBO, gl.msp-1); }
+    gl.lastClipFBO = gl.msp-1;
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gl.fboTex.ptr[gl.lastClipFBO].ptr[0]);
+    glActiveTexture(GL_TEXTURE0);
+  }
 }
 
 void glnvg__setClipUniforms (GLNVGcontext* gl, int uniformOffset, NVGClipMode clipmode) nothrow @trusted @nogc {
   assert(clipmode != NVGClipMode.None);
   GLNVGfragUniforms* frag = nvg__fragUniformPtr(gl, uniformOffset);
-  // just in case: unbind unit 1 texture
-  /*
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glActiveTexture(GL_TEXTURE0);
-  */
   // save uniform offset for `glnvg__finishClip()`
   gl.lastClipUniOfs = uniformOffset;
   // get FBO index, bind this FBO
@@ -12378,6 +12407,7 @@ void glnvg__triangles (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nogc
     glnvg__checkError(gl, "triangles fill");
     glDrawArrays(GL_TRIANGLES, call.triangleOffset, call.triangleCount);
   } else {
+    //TODO(?): use texture as mask?
   }
 }
 
@@ -12481,6 +12511,8 @@ void glnvg__renderSetAffine (void* uptr, in ref NVGMatrix mat) nothrow @trusted 
   call.affine.mat.ptr[0..6] = mat.mat.ptr[0..6];
 }
 
+version(nanovega_debug_clipping) public __gshared bool nanovegaClipDebugDump = false;
+
 void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   GLNVGcontext* gl = cast(GLNVGcontext*)uptr;
   enum ShaderType { None, Fill, Clip }
@@ -12491,12 +12523,11 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
 
     // Setup require GL state.
     glUseProgram(gl.shader.prog);
-    //glColor4f(1, 1, 1, 1);
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
-    gl.lastClipTextureId = -1; // invalidate cache
+    glnvg__resetFBOClipTextureCache(gl);
 
     //glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     static if (NANOVG_GL_USE_STATE_FILTER) {
@@ -12579,27 +12610,58 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
         case GLNVG_AFFINE: gl.lastAffine = call.affine; glnvg__affine(gl, call); break;
         // clip region management
         case GLNVG_PUSHCLIP:
+          version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): push clip (cache:%d); current state is %d\n", gl.msp-1, gl.lastClipFBO, gl.maskStack.ptr[gl.msp-1]); }
           if (gl.msp >= gl.maskStack.length) assert(0, "NanoVega: mask stack overflow in OpenGL backend");
-          gl.maskStack.ptr[gl.msp++] = GLMaskState.Uninitialized;
+          if (gl.maskStack.ptr[gl.msp-1] == GLMaskState.DontMask) {
+            gl.maskStack.ptr[gl.msp++] = GLMaskState.DontMask;
+          } else {
+            gl.maskStack.ptr[gl.msp++] = GLMaskState.Uninitialized;
+          }
+          // no need to reset FBO cache here, as nothing was changed
           break;
         case GLNVG_POPCLIP:
           if (gl.msp <= 1) assert(0, "NanoVega: mask stack underflow in OpenGL backend");
+          version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): pop clip (cache:%d); current state is %d; previous state is %d\n", gl.msp-1, gl.lastClipFBO, gl.maskStack.ptr[gl.msp-1], gl.maskStack.ptr[gl.msp-2]); }
           --gl.msp;
+          assert(gl.msp > 0);
           //{ import core.stdc.stdio; printf("popped; new msp is %d; state is %d\n", gl.msp, gl.maskStack.ptr[gl.msp]); }
           // check popped item
           final switch (gl.maskStack.ptr[gl.msp]) {
-            case GLMaskState.DontMask: glnvg__resetFBOClipTextureCache(gl); break;
-            case GLMaskState.Uninitialized: break; // do nothing, as nothing was changed
-            case GLMaskState.Initialized: glnvg__resetFBOClipTextureCache(gl); break;
+            case GLMaskState.DontMask:
+              // if last FBO was "don't mask", reset cache if current is not "don't mask"
+              if (gl.maskStack.ptr[gl.msp-1] != GLMaskState.DontMask) {
+                version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("  +++ need to reset FBO cache\n"); }
+                glnvg__resetFBOClipTextureCache(gl);
+              }
+              break;
+            case GLMaskState.Uninitialized:
+              // if last FBO texture was uninitialized, it means that nothing was changed,
+              // so we can keep using cached FBO
+              break;
+            case GLMaskState.Initialized:
+              // if last FBO was initialized, it means that something was definitely changed
+              version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("  +++ need to reset FBO cache\n"); }
+              glnvg__resetFBOClipTextureCache(gl);
+              break;
             case GLMaskState.JustCleared: assert(0, "NanoVega: internal FBO stack error");
           }
           break;
         case GLNVG_RESETCLIP:
           // mark current mask as "don't mask"
+          version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("FBO(%d): reset clip (cache:%d); current state is %d\n", gl.msp-1, gl.lastClipFBO, gl.maskStack.ptr[gl.msp-1]); }
           if (gl.msp > 0) {
-            gl.maskStack.ptr[gl.msp-1] = GLMaskState.DontMask;
-            glnvg__resetFBOClipTextureCache(gl);
+            if (gl.maskStack.ptr[gl.msp-1] != GLMaskState.DontMask) {
+              gl.maskStack.ptr[gl.msp-1] = GLMaskState.DontMask;
+              version(nanovega_debug_clipping) if (nanovegaClipDebugDump) { import core.stdc.stdio; printf("  +++ need to reset FBO cache\n"); }
+              glnvg__resetFBOClipTextureCache(gl);
+            }
           }
+          break;
+        case GLNVG_CLIP_DDUMP_ON:
+          version(nanovega_debug_clipping) nanovegaClipDebugDump = true;
+          break;
+        case GLNVG_CLIP_DDUMP_OFF:
+          version(nanovega_debug_clipping) nanovegaClipDebugDump = false;
           break;
         default: assert(0, "NanoVega: invalid command in OpenGL backend (fatal internal error)");
       }
