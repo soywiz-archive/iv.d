@@ -24,7 +24,7 @@ __gshared uint smpbufpos;
 void playbuf () {
   if (smpbufpos == 0) return;
   foreach (ref short v; smpbuf[0..smpbufpos]) {
-    int n = v*4;
+    int n = v*2;
     if (n < short.min) n = short.min;
     if (n > short.max) n = short.max;
     v = cast(short)n;
