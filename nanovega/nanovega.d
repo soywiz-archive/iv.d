@@ -966,7 +966,9 @@ public struct NVGPaint {
   float radius = 0.0f;
   float feather = 0.0f;
   NVGColor innerColor; /// this can be used to modulate images (fill/font)
+  NVGColor middleColor;
   NVGColor outerColor;
+  float midp = -1; // middle stop for 3-color gradient
   NVGImage image;
   bool simpleColor; /// if `true`, only innerColor is used, and this is solid-color paint
 
@@ -976,6 +978,8 @@ public struct NVGPaint {
     radius = p.radius;
     feather = p.feather;
     innerColor = p.innerColor;
+    middleColor = p.middleColor;
+    midp = p.midp;
     outerColor = p.outerColor;
     image = p.image;
     simpleColor = p.simpleColor;
@@ -987,6 +991,8 @@ public struct NVGPaint {
     radius = p.radius;
     feather = p.feather;
     innerColor = p.innerColor;
+    middleColor = p.middleColor;
+    midp = p.midp;
     outerColor = p.outerColor;
     image = p.image;
     simpleColor = p.simpleColor;
@@ -1944,9 +1950,11 @@ private:
 
           // apply global alpha
           fillPaint.innerColor.a *= state.alpha;
+          fillPaint.middleColor.a *= state.alpha;
           fillPaint.outerColor.a *= state.alpha;
 
           fillPaint.innerColor.applyTint(fillTint);
+          fillPaint.middleColor.applyTint(fillTint);
           fillPaint.outerColor.applyTint(fillTint);
 
           ctx.params.renderFill(ctx.params.userPtr, state.compositeOperation, cc.clipmode, &fillPaint, &state.scissor, cc.fringeWidth, cc.bounds.ptr, cc.paths, cc.npaths, cc.evenOddMode);
@@ -1964,13 +1972,16 @@ private:
           NVGPaint strokePaint = node.paint;
 
           strokePaint.innerColor.a *= cc.strokeAlphaMul;
+          strokePaint.middleColor.a *= cc.strokeAlphaMul;
           strokePaint.outerColor.a *= cc.strokeAlphaMul;
 
           // apply global alpha
           strokePaint.innerColor.a *= state.alpha;
+          strokePaint.middleColor.a *= state.alpha;
           strokePaint.outerColor.a *= state.alpha;
 
           strokePaint.innerColor.applyTint(strokeTint);
+          strokePaint.middleColor.applyTint(strokeTint);
           strokePaint.outerColor.applyTint(strokeTint);
 
           ctx.params.renderStroke(ctx.params.userPtr, state.compositeOperation, cc.clipmode, &strokePaint, &state.scissor, cc.fringeWidth, cc.strokeWidth, cc.paths, cc.npaths);
@@ -2663,8 +2674,8 @@ void nvg__setPaintColor() (ref NVGPaint p, in auto ref NVGColor color) nothrow @
   p.xform.identity;
   p.radius = 0.0f;
   p.feather = 1.0f;
-  p.innerColor = color;
-  p.outerColor = color;
+  p.innerColor = p.middleColor = p.outerColor = color;
+  p.midp = -1;
   p.simpleColor = true;
 }
 
@@ -2821,14 +2832,14 @@ public void strokeColor (NVGContext ctx, Color color) nothrow @trusted @nogc {
 
 /// Sets current stroke style to a solid color.
 /// Group: render_styles
-public void strokeColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
+public void strokeColor() (NVGContext ctx, in auto ref NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(state.stroke, color);
 }
 
 /// Sets current stroke style to a paint, which can be a one of the gradients or a pattern.
 /// Group: render_styles
-public void strokePaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
+public void strokePaint() (NVGContext ctx, in auto ref NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.stroke = paint;
   //nvgTransformMultiply(state.stroke.xform[], state.xform[]);
@@ -2846,18 +2857,34 @@ public void fillColor (NVGContext ctx, Color color) nothrow @trusted @nogc {
 
 /// Sets current fill style to a solid color.
 /// Group: render_styles
-public void fillColor (NVGContext ctx, NVGColor color) nothrow @trusted @nogc {
+public void fillColor() (NVGContext ctx, in auto ref NVGColor color) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   nvg__setPaintColor(state.fill, color);
 }
 
 /// Sets current fill style to a paint, which can be a one of the gradients or a pattern.
 /// Group: render_styles
-public void fillPaint (NVGContext ctx, NVGPaint paint) nothrow @trusted @nogc {
+public void fillPaint() (NVGContext ctx, in auto ref NVGPaint paint) nothrow @trusted @nogc {
   NVGstate* state = nvg__getState(ctx);
   state.fill = paint;
   //nvgTransformMultiply(state.fill.xform[], state.xform[]);
   state.fill.xform.mul(state.xform);
+}
+
+/// Sets current fill style to a multistop linear gradient.
+/// Group: render_styles
+public void fillPaint() (NVGContext ctx, in auto ref NVGLGS lgs) nothrow @trusted @nogc {
+  if (!lgs.valid) {
+    NVGPaint p = void;
+    memset(&p, 0, p.sizeof);
+    nvg__setPaintColor(p, NVGColor.red);
+    ctx.fillPaint = p;
+  } else if (lgs.midp >= -1) {
+    //{ import core.stdc.stdio; printf("SIMPLE! midp=%f\n", cast(double)lgs.midp); }
+    ctx.fillPaint = ctx.linearGradient(lgs.cx, lgs.cy, lgs.dimx, lgs.dimy, lgs.ic, lgs.midp, lgs.mc, lgs.oc);
+  } else {
+    ctx.fillPaint = ctx.imagePattern(lgs.cx, lgs.cy, lgs.dimx, lgs.dimy, lgs.angle, lgs.imgid);
+  }
 }
 
 /// Returns current transformation matrix.
@@ -3073,6 +3100,16 @@ static if (NanoVegaHasArsdColor) {
 public NVGPaint linearGradient (NVGContext ctx, in float sx, in float sy, in float ex, in float ey, in Color icol, in Color ocol) nothrow @trusted @nogc {
   return ctx.linearGradient(sx, sy, ex, ey, NVGColor(icol), NVGColor(ocol));
 }
+/** Creates and returns a linear gradient with middle stop. Parameters `(sx, sy) (ex, ey)` specify the start
+ * and end coordinates of the linear gradient, icol specifies the start color, midp specifies stop point in
+ * range `(0..1)`, and ocol the end color.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
+ *
+ * Group: paints
+ */
+public NVGPaint linearGradient (NVGContext ctx, in float sx, in float sy, in float ex, in float ey, in Color icol, in float midp, in Color mcol, in Color ocol) nothrow @trusted @nogc {
+  return ctx.linearGradient(sx, sy, ex, ey, NVGColor(icol), midp, NVGColor(mcol), NVGColor(ocol));
+}
 }
 
 /** Creates and returns a linear gradient. Parameters `(sx, sy) (ex, ey)` specify the start and end coordinates
@@ -3081,7 +3118,7 @@ public NVGPaint linearGradient (NVGContext ctx, in float sx, in float sy, in flo
  *
  * Group: paints
  */
-public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, float ey, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
+public NVGPaint linearGradient() (NVGContext ctx, float sx, float sy, float ex, float ey, in auto ref NVGColor icol, in auto ref NVGColor ocol) nothrow @trusted @nogc {
   enum large = 1e5f;
 
   NVGPaint p = void;
@@ -3111,7 +3148,61 @@ public NVGPaint linearGradient (NVGContext ctx, float sx, float sy, float ex, fl
 
   p.feather = nvg__max(NVG_MIN_FEATHER, d);
 
-  p.innerColor = icol;
+  p.innerColor = p.middleColor = icol;
+  p.outerColor = ocol;
+  p.midp = -1;
+
+  return p;
+}
+
+/** Creates and returns a linear gradient with middle stop. Parameters `(sx, sy) (ex, ey)` specify the start
+ * and end coordinates of the linear gradient, icol specifies the start color, midp specifies stop point in
+ * range `(0..1)`, and ocol the end color.
+ * The gradient is transformed by the current transform when it is passed to [fillPaint] or [strokePaint].
+ *
+ * Group: paints
+ */
+public NVGPaint linearGradient() (NVGContext ctx, float sx, float sy, float ex, float ey, in auto ref NVGColor icol, in float midp, in auto ref NVGColor mcol, in auto ref NVGColor ocol) nothrow @trusted @nogc {
+  enum large = 1e5f;
+
+  NVGPaint p = void;
+  memset(&p, 0, p.sizeof);
+  p.simpleColor = false;
+
+  // Calculate transform aligned to the line
+  float dx = ex-sx;
+  float dy = ey-sy;
+  immutable float d = nvg__sqrtf(dx*dx+dy*dy);
+  if (d > 0.0001f) {
+    dx /= d;
+    dy /= d;
+  } else {
+    dx = 0;
+    dy = 1;
+  }
+
+  p.xform.mat.ptr[0] = dy; p.xform.mat.ptr[1] = -dx;
+  p.xform.mat.ptr[2] = dx; p.xform.mat.ptr[3] = dy;
+  p.xform.mat.ptr[4] = sx-dx*large; p.xform.mat.ptr[5] = sy-dy*large;
+
+  p.extent.ptr[0] = large;
+  p.extent.ptr[1] = large+d*0.5f;
+
+  p.radius = 0.0f;
+
+  p.feather = nvg__max(NVG_MIN_FEATHER, d);
+
+  if (midp <= 0) {
+    p.innerColor = p.middleColor = mcol;
+    p.midp = -1;
+  } else if (midp > 1) {
+    p.innerColor = p.middleColor = icol;
+    p.midp = -1;
+  } else {
+    p.innerColor = icol;
+    p.middleColor = mcol;
+    p.midp = midp;
+  }
   p.outerColor = ocol;
 
   return p;
@@ -3135,7 +3226,7 @@ public NVGPaint radialGradient (NVGContext ctx, in float cx, in float cy, in flo
  *
  * Group: paints
  */
-public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, float outr, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
+public NVGPaint radialGradient() (NVGContext ctx, float cx, float cy, float inr, float outr, in auto ref NVGColor icol, in auto ref NVGColor ocol) nothrow @trusted @nogc {
   immutable float r = (inr+outr)*0.5f;
   immutable float f = (outr-inr);
 
@@ -3154,8 +3245,9 @@ public NVGPaint radialGradient (NVGContext ctx, float cx, float cy, float inr, f
 
   p.feather = nvg__max(NVG_MIN_FEATHER, f);
 
-  p.innerColor = icol;
+  p.innerColor = p.middleColor = icol;
   p.outerColor = ocol;
+  p.midp = -1;
 
   return p;
 }
@@ -3182,7 +3274,7 @@ public NVGPaint boxGradient (NVGContext ctx, in float x, in float y, in float w,
  *
  * Group: paints
  */
-public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h, float r, float f, NVGColor icol, NVGColor ocol) nothrow @trusted @nogc {
+public NVGPaint boxGradient() (NVGContext ctx, float x, float y, float w, float h, float r, float f, in auto ref NVGColor icol, in auto ref NVGColor ocol) nothrow @trusted @nogc {
   NVGPaint p = void;
   memset(&p, 0, p.sizeof);
   p.simpleColor = false;
@@ -3198,8 +3290,9 @@ public NVGPaint boxGradient (NVGContext ctx, float x, float y, float w, float h,
 
   p.feather = nvg__max(NVG_MIN_FEATHER, f);
 
-  p.innerColor = icol;
+  p.innerColor = p.middleColor = icol;
   p.outerColor = ocol;
+  p.midp = -1;
 
   return p;
 }
@@ -3224,7 +3317,8 @@ public NVGPaint imagePattern() (NVGContext ctx, float cx, float cy, float w, flo
 
   p.image = image;
 
-  p.innerColor = p.outerColor = nvgRGBAf(1, 1, 1, alpha);
+  p.innerColor = p.middleColor = p.outerColor = nvgRGBAf(1, 1, 1, alpha);
+  p.midp = -1;
 
   return p;
 }
@@ -3234,14 +3328,17 @@ public NVGPaint imagePattern() (NVGContext ctx, float cx, float cy, float w, flo
 /// Group: paints
 public struct NVGLGS {
 private:
+  NVGColor ic, mc, oc; // inner, middle, out
+  float midp;
   NVGImage imgid;
   // [imagePattern] arguments
-  float cx, cy, dim, angle;
+  float cx, cy, dimx, dimy; // dimx and dimy are ex and ey for simple gradients
+  public float angle; ///
 
 public:
   @disable this (this); // no copies
-  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return imgid.valid; } ///
-  void clear ()  nothrow @safe @nogc { pragma(inline, true); imgid.clear(); } ///
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (imgid.valid || midp >= -1); } ///
+  void clear ()  nothrow @safe @nogc { pragma(inline, true); imgid.clear(); midp = float.nan; } ///
 }
 
 /** Returns [NVGPaint] for linear gradient with stops, created with [createLinearGradientWithStops].
@@ -3256,8 +3353,10 @@ public NVGPaint asPaint() (NVGContext ctx, in auto ref NVGLGS lgs) nothrow @trus
     memset(&p, 0, p.sizeof);
     nvg__setPaintColor(p, NVGColor.red);
     return p;
+  } else if (lgs.midp >= -1) {
+    return ctx.linearGradient(lgs.cx, lgs.cy, lgs.dimx, lgs.dimy, lgs.ic, lgs.midp, lgs.mc, lgs.oc);
   } else {
-    return ctx.imagePattern(lgs.cx, lgs.cy, lgs.dim, lgs.dim, lgs.angle, lgs.imgid);
+    return ctx.imagePattern(lgs.cx, lgs.cy, lgs.dimx, lgs.dimy, lgs.angle, lgs.imgid);
   }
 }
 
@@ -3268,9 +3367,10 @@ public struct NVGGradientStop {
   float offset = 0; /// [0..1]
   NVGColor color; ///
 
-  ///
-  this() (in float aofs, in auto ref NVGColor aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = aclr; }
-  this() (in float aofs, in Color aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = NVGColor(aclr); }
+  this() (in float aofs, in auto ref NVGColor aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = aclr; } ///
+  static if (NanoVegaHasArsdColor) {
+    this() (in float aofs, in Color aclr) nothrow @trusted @nogc { pragma(inline, true); offset = aofs; color = NVGColor(aclr); } ///
+  }
 }
 
 /// Create linear gradient data suitable to use with `linearGradient(res)`.
@@ -3310,31 +3410,50 @@ public NVGLGS createLinearGradientWithStops (NVGContext ctx, in float sx, in flo
   }
 
   NVGLGS res;
-
-  uint[NVG_GRADIENT_SAMPLES] data = void;
-  immutable float w = ex-sx;
-  immutable float h = ey-sy;
-  res.dim = nvg__sqrtf(w*w+h*h);
-
   res.cx = sx;
   res.cy = sy;
-  res.angle =
-    (/*nvg__absf(h) < 0.0001 ? 0 :
-     nvg__absf(w) < 0.0001 ? 90.nvgDegrees :*/
-     nvg__atan2f(h/*ey-sy*/, w/*ex-sx*/));
 
-  if (stops.length > 0) {
-    auto s0 = NVGGradientStop(0, nvgRGBAf(0, 0, 0, 1));
-    auto s1 = NVGGradientStop(1, nvgRGBAf(1, 1, 1, 1));
-    if (stops.length > 64) stops = stops[0..64];
-    if (stops.length) {
-      s0.color = stops[0].color;
-      s1.color = stops[$-1].color;
+  if (stops.length == 2 && stops.ptr[0].offset <= 0 && stops.ptr[1].offset >= 1) {
+    // create simple linear gradient
+    res.ic = res.mc = stops.ptr[0].color;
+    res.oc = stops.ptr[1].color;
+    res.midp = -1;
+    res.dimx = ex;
+    res.dimy = ey;
+  } else if (stops.length == 3 && stops.ptr[0].offset <= 0 && stops.ptr[2].offset >= 1) {
+    // create simple linear gradient with middle stop
+    res.ic = stops.ptr[0].color;
+    res.mc = stops.ptr[1].color;
+    res.oc = stops.ptr[2].color;
+    res.midp = stops.ptr[1].offset;
+    res.dimx = ex;
+    res.dimy = ey;
+  } else {
+    // create image gradient
+    uint[NVG_GRADIENT_SAMPLES] data = void;
+    immutable float w = ex-sx;
+    immutable float h = ey-sy;
+    res.dimx = nvg__sqrtf(w*w+h*h);
+    res.dimy = 1; //???
+
+    res.angle =
+      (/*nvg__absf(h) < 0.0001 ? 0 :
+       nvg__absf(w) < 0.0001 ? 90.nvgDegrees :*/
+       nvg__atan2f(h/*ey-sy*/, w/*ex-sx*/));
+
+    if (stops.length > 0) {
+      auto s0 = NVGGradientStop(0, nvgRGBAf(0, 0, 0, 1));
+      auto s1 = NVGGradientStop(1, nvgRGBAf(1, 1, 1, 1));
+      if (stops.length > 64) stops = stops[0..64];
+      if (stops.length) {
+        s0.color = stops[0].color;
+        s1.color = stops[$-1].color;
+      }
+      gradientSpan(data.ptr, &s0, (stops.length ? stops.ptr : &s1));
+      foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
+      gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
+      res.imgid = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[]/*, NVGImageFlag.RepeatX, NVGImageFlag.RepeatY*/);
     }
-    gradientSpan(data.ptr, &s0, (stops.length ? stops.ptr : &s1));
-    foreach (immutable i; 0..stops.length-1) gradientSpan(data.ptr, stops.ptr+i, stops.ptr+i+1);
-    gradientSpan(data.ptr, (stops.length ? stops.ptr+stops.length-1 : &s0), &s1);
-    res.imgid = ctx.createImageRGBA(NVG_GRADIENT_SAMPLES, 1, data[], NVGImageFlag.RepeatX, NVGImageFlag.RepeatY);
   }
   return res;
 }
@@ -5295,6 +5414,7 @@ public void fill (NVGContext ctx) nothrow @trusted @nogc {
   // apply global alpha
   NVGPaint fillPaint = state.fill;
   fillPaint.innerColor.a *= state.alpha;
+  fillPaint.middleColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
 
   ctx.appendCurrentPathToCache(ctx.recset, state.fill);
@@ -5328,10 +5448,12 @@ public void stroke (NVGContext ctx) nothrow @trusted @nogc {
 
   NVGPaint strokePaint = state.stroke;
   strokePaint.innerColor.a *= cache.strokeAlphaMul;
+  strokePaint.middleColor.a *= cache.strokeAlphaMul;
   strokePaint.outerColor.a *= cache.strokeAlphaMul;
 
   // apply global alpha
   strokePaint.innerColor.a *= state.alpha;
+  strokePaint.middleColor.a *= state.alpha;
   strokePaint.outerColor.a *= state.alpha;
 
   ctx.appendCurrentPathToCache(ctx.recset, state.stroke);
@@ -5370,6 +5492,7 @@ public void clip (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.Union) nothr
   // apply global alpha
   NVGPaint fillPaint = state.fill;
   fillPaint.innerColor.a *= state.alpha;
+  fillPaint.middleColor.a *= state.alpha;
   fillPaint.outerColor.a *= state.alpha;
 
   //ctx.appendCurrentPathToCache(ctx.recset, state.fill);
@@ -5412,10 +5535,12 @@ public void clipStroke (NVGContext ctx, NVGClipMode aclipmode=NVGClipMode.Union)
 
   NVGPaint strokePaint = state.stroke;
   strokePaint.innerColor.a *= cache.strokeAlphaMul;
+  strokePaint.middleColor.a *= cache.strokeAlphaMul;
   strokePaint.outerColor.a *= cache.strokeAlphaMul;
 
   // apply global alpha
   strokePaint.innerColor.a *= state.alpha;
+  strokePaint.middleColor.a *= state.alpha;
   strokePaint.outerColor.a *= state.alpha;
 
   //ctx.appendCurrentPathToCache(ctx.recset, state.stroke);
@@ -7456,6 +7581,7 @@ void nvg__renderText (NVGContext ctx, NVGvertex* verts, int nverts) nothrow @tru
 
   // Apply global alpha
   paint.innerColor.a *= state.alpha;
+  paint.middleColor.a *= state.alpha;
   paint.outerColor.a *= state.alpha;
 
   ctx.params.renderTriangles(ctx.params.userPtr, state.compositeOperation, NVGClipMode.None, &paint, &state.scissor, verts, nverts);
@@ -11352,7 +11478,7 @@ struct GLNVGpath {
 
 align(1) struct GLNVGfragUniforms {
 align(1):
-  enum UNIFORM_ARRAY_SIZE = 12;
+  enum UNIFORM_ARRAY_SIZE = 13;
   // note: after modifying layout or size of uniform array,
   // don't forget to also update the fragment shader source!
   align(1) union {
@@ -11362,6 +11488,7 @@ align(1):
       float[12] scissorMat; // matrices are actually 3 vec4s
       float[12] paintMat;
       NVGColor innerCol;
+      NVGColor middleCol;
       NVGColor outerCol;
       float[2] scissorExt;
       float[2] scissorScale;
@@ -11373,7 +11500,8 @@ align(1):
       float texType;
       float type;
       float doclip;
-      float unused1, unused2, unused3;
+      float midp; // for gradients
+      float unused2, unused3;
     }
     float[4][UNIFORM_ARRAY_SIZE] uniformArray;
   }
@@ -11970,17 +12098,19 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     #define scissorMat mat3(frag[0].xyz, frag[1].xyz, frag[2].xyz)
     #define paintMat mat3(frag[3].xyz, frag[4].xyz, frag[5].xyz)
     #define innerCol frag[6]
-    #define outerCol frag[7]
-    #define scissorExt frag[8].xy
-    #define scissorScale frag[8].zw
-    #define extent frag[9].xy
-    #define radius frag[9].z
-    #define feather frag[9].w
-    #define strokeMult frag[10].x
-    #define strokeThr frag[10].y
-    #define texType int(frag[10].z)
-    #define type int(frag[10].w)
-    #define doclip int(frag[11].x)
+    #define middleCol frag[7]
+    #define outerCol frag[7+1]
+    #define scissorExt frag[8+1].xy
+    #define scissorScale frag[8+1].zw
+    #define extent frag[9+1].xy
+    #define radius frag[9+1].z
+    #define feather frag[9+1].w
+    #define strokeMult frag[10+1].x
+    #define strokeThr frag[10+1].y
+    #define texType int(frag[10+1].z)
+    #define type int(frag[10+1].w)
+    #define doclip int(frag[11+1].x)
+    #define midp frag[11+1].y
 
     float sdroundrect (in vec2 pt, in vec2 ext, in float rad) {
       vec2 ext2 = ext-vec2(rad, rad);
@@ -12027,7 +12157,16 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
         // Calculate gradient color using box gradient
         vec2 pt = (paintMat*vec3(fpos, 1.0)).xy;
         float d = clamp((sdroundrect(pt, extent, radius)+feather*0.5)/feather, 0.0, 1.0);
-        color = mix(innerCol, outerCol, d);
+        if (midp <= 0) {
+          color = mix(innerCol, outerCol, d);
+        } else {
+          midp = min(midp, 1.0);
+          if (d < midp) {
+            color = mix(innerCol, middleCol, d/midp);
+          } else {
+            color = mix(middleCol, outerCol, (d-midp)/midp);
+          }
+        }
         // Combine alpha
         color *= strokeAlpha*scissor;
       } else if (type == 2) { /* NSVG_SHADER_FILLIMG */
@@ -12258,7 +12397,9 @@ bool glnvg__convertPaint (GLNVGcontext* gl, GLNVGfragUniforms* frag, NVGPaint* p
   memset(frag, 0, (*frag).sizeof);
 
   frag.innerCol = glnvg__premulColor(paint.innerColor);
+  frag.middleCol = glnvg__premulColor(paint.middleColor);
   frag.outerCol = glnvg__premulColor(paint.outerColor);
+  frag.midp = paint.midp;
 
   if (scissor.extent.ptr[0] < -0.5f || scissor.extent.ptr[1] < -0.5f) {
     memset(frag.scissorMat.ptr, 0, frag.scissorMat.sizeof);
