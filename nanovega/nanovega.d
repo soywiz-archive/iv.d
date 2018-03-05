@@ -1396,15 +1396,21 @@ public alias NVGContext = NVGcontextinternal*;
 // Returns FontStash context of the given NanoVega context.
 public FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs : null); }
 
-/** Bezier curve tesselator.
+/** Bezier curve rasterizer.
  *
- * De Casteljau Bezier tesselator is faster, but currently rasterizing curves with cusps sligtly wrong.
+ * De Casteljau Bezier rasterizer is faster, but currently rasterizing curves with cusps sligtly wrong.
  * It doesn't really matter in practice.
  *
- * AFD tesselator is somewhat slower, but does cusps better. */
+ * AFD tesselator is somewhat slower, but does cusps better.
+ *
+ * McSeem rasterizer should have the best quality, bit it is the slowest method. Basically, you will
+ * never notice any visial difference (and this code is not really debugged), so you probably should
+ * not use it. It is there for further experiments.
+ */
 public enum NVGTesselation {
   DeCasteljau, /// default: standard well-known tesselation algorithm
   AFD, /// adaptive forward differencing
+  DeCasteljauMcSeem, /// standard well-known tesselation algorithm, with improvements from Maxim Shemanarev; slowest one, but should give best results
 }
 
 /// Default tesselator for Bezier curves.
@@ -3775,6 +3781,180 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
   nvg__tesselateBezier(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
 }
 
+// based on the ideas and code of Maxim Shemanarev. Rest in Peace, bro!
+void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) nothrow @trusted @nogc {
+  enum CollinearEPS = 0.00000001f; // 0.00001f;
+  enum AngleTolEPS = 0.01f;
+  enum angleTol = 0.0f; // this should be made context parameter
+  enum CuspLimit = 0; // this should be made context parameter
+
+  static float distSquared (in float x1, in float y1, in float x2, in float y2) pure nothrow @safe @nogc {
+    pragma(inline, true);
+    immutable float dx = x2-x1;
+    immutable float dy = y2-y1;
+    return dx*dx+dy*dy;
+  }
+
+  if (level == 0) {
+    nvg__addPoint(ctx, x1, y1, 0);
+    nvg__tesselateBezierMcSeem(ctx, x1, y1, x2, y2, x3, y3, x4, y4, 1, type);
+    nvg__addPoint(ctx, x4, y4, type);
+    return;
+  }
+
+  if (level >= 32) return; // recurse limit; practically, it should be never reached, but...
+
+  // calculate all the mid-points of the line segments
+  immutable float x12 = (x1+x2)*0.5f;
+  immutable float y12 = (y1+y2)*0.5f;
+  immutable float x23 = (x2+x3)*0.5f;
+  immutable float y23 = (y2+y3)*0.5f;
+  immutable float x34 = (x3+x4)*0.5f;
+  immutable float y34 = (y3+y4)*0.5f;
+  immutable float x123 = (x12+x23)*0.5f;
+  immutable float y123 = (y12+y23)*0.5f;
+  immutable float x234 = (x23+x34)*0.5f;
+  immutable float y234 = (y23+y34)*0.5f;
+  immutable float x1234 = (x123+x234)*0.5f;
+  immutable float y1234 = (y123+y234)*0.5f;
+
+  // try to approximate the full cubic curve by a single straight line
+  immutable float dx = x4-x1;
+  immutable float dy = y4-y1;
+
+  float d2 = nvg__absf(((x2-x4)*dy-(y2-y4)*dx));
+  float d3 = nvg__absf(((x3-x4)*dy-(y3-y4)*dx));
+  //immutable float da1, da2, k;
+
+  final switch ((cast(int)(d2 > CollinearEPS)<<1)+cast(int)(d3 > CollinearEPS)) {
+    case 0:
+      // all collinear or p1 == p4
+      float k = dx*dx+dy*dy;
+      if (k == 0) {
+        d2 = distSquared(x1, y1, x2, y2);
+        d3 = distSquared(x4, y4, x3, y3);
+      } else {
+        k = 1.0f/k;
+        float da1 = x2-x1;
+        float da2 = y2-y1;
+        d2 = k*(da1*dx+da2*dy);
+        da1 = x3-x1;
+        da2 = y3-y1;
+        d3 = k*(da1*dx+da2*dy);
+        if (d2 > 0 && d2 < 1 && d3 > 0 && d3 < 1) {
+          // Simple collinear case, 1---2---3---4
+          // We can leave just two endpoints
+          return;
+        }
+             if (d2 <= 0) d2 = distSquared(x2, y2, x1, y1);
+        else if (d2 >= 1) d2 = distSquared(x2, y2, x4, y4);
+        else d2 = distSquared(x2, y2, x1+d2*dx, y1+d2*dy);
+
+             if (d3 <= 0) d3 = distSquared(x3, y3, x1, y1);
+        else if (d3 >= 1) d3 = distSquared(x3, y3, x4, y4);
+        else d3 = distSquared(x3, y3, x1+d3*dx, y1+d3*dy);
+      }
+      if (d2 > d3) {
+        if (d2 < ctx.tessTol) {
+          nvg__addPoint(ctx, x2, y2, type);
+          return;
+        }
+      } if (d3 < ctx.tessTol) {
+        nvg__addPoint(ctx, x3, y3, type);
+        return;
+      }
+      break;
+    case 1:
+      // p1,p2,p4 are collinear, p3 is significant
+      if (d3*d3 <= ctx.tessTol*(dx*dx+dy*dy)) {
+        if (angleTol < AngleTolEPS) {
+          nvg__addPoint(ctx, x23, y23, type);
+          return;
+        }
+        // angle condition
+        float da1 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-nvg__atan2f(y3-y2, x3-x2));
+        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+        if (da1 < angleTol) {
+          nvg__addPoint(ctx, x2, y2, type);
+          nvg__addPoint(ctx, x3, y3, type);
+          return;
+        }
+        static if (CuspLimit != 0) {
+          if (CuspLimit != 0.0) {
+            if (da1 > CuspLimit) {
+              nvg__addPoint(ctx, x3, y3, type);
+              return;
+            }
+          }
+        }
+      }
+      break;
+    case 2:
+      // p1,p3,p4 are collinear, p2 is significant
+      if (d2*d2 <= ctx.tessTol*(dx*dx+dy*dy)) {
+        if (angleTol < AngleTolEPS) {
+          nvg__addPoint(ctx, x23, y23, type);
+          return;
+        }
+        // angle condition
+        float da1 = nvg__absf(nvg__atan2f(y3-y2, x3-x2)-nvg__atan2f(y2-y1, x2-x1));
+        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+        if (da1 < angleTol) {
+          nvg__addPoint(ctx, x2, y2, type);
+          nvg__addPoint(ctx, x3, y3, type);
+          return;
+        }
+        static if (CuspLimit != 0) {
+          if (CuspLimit != 0.0) {
+            if (da1 > CuspLimit) {
+              nvg__addPoint(ctx, x2, y2, type);
+              return;
+            }
+          }
+        }
+      }
+      break;
+    case 3:
+      // regular case
+      if ((d2+d3)*(d2+d3) <= ctx.tessTol*(dx*dx+dy*dy)) {
+        // if the curvature doesn't exceed the distance tolerance value, we tend to finish subdivisions
+        if (angleTol < AngleTolEPS) {
+          nvg__addPoint(ctx, x23, y23, type);
+          return;
+        }
+        // angle and cusp condition
+        immutable float k = nvg__atan2f(y3-y2, x3-x2);
+        float da1 = nvg__absf(k-nvg__atan2f(y2-y1, x2-x1));
+        float da2 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-k);
+        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+        if (da2 >= NVG_PI) da2 = 2*NVG_PI-da2;
+        if (da1+da2 < angleTol) {
+          // finally we can stop the recursion
+          nvg__addPoint(ctx, x23, y23, type);
+          return;
+        }
+        static if (CuspLimit != 0) {
+          if (CuspLimit != 0.0) {
+            if (da1 > CuspLimit) {
+              nvg__addPoint(ctx, x2, y2, type);
+              return;
+            }
+            if (da2 > CuspLimit) {
+              nvg__addPoint(ctx, x3, y3, type);
+              return;
+            }
+          }
+        }
+      }
+      break;
+  }
+
+  // continue subdivision
+  nvg__tesselateBezierMcSeem(ctx, x1, y1, x12, y12, x123, y123, x1234, y1234, level+1, 0);
+  nvg__tesselateBezierMcSeem(ctx, x1234, y1234, x234, y234, x34, y34, x4, y4, level+1, type);
+}
+
+
 // Adaptive forward differencing for bezier tesselation.
 // See Lien, Sheue-Ling, Michael Shantz, and Vaughan Pratt.
 // "Adaptive forward differencing for rendering curves and surfaces."
@@ -3914,6 +4094,8 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
           const p = &ctx.commands[i+5];
           if (ctx.tesselatortype == NVGTesselation.DeCasteljau) {
             nvg__tesselateBezier(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, PointFlag.Corner);
+          } else if (ctx.tesselatortype == NVGTesselation.DeCasteljauMcSeem) {
+            nvg__tesselateBezierMcSeem(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], 0, PointFlag.Corner);
           } else {
             nvg__tesselateBezierAFD(ctx, last.x, last.y, cp1[0], cp1[1], cp2[0], cp2[1], p[0], p[1], PointFlag.Corner);
           }
