@@ -1474,9 +1474,11 @@ private:
   NVGstate[NVG_MAX_STATES] states;
   int nstates;
   NVGpathCache* cache;
-  float tessTol;
+  public float tessTol;
+  public float angleTol; // 0.0f -- angle tolerance for McSeem Bezier rasterizer
+  public float cuspLimit; // 0 -- cusp limit for McSeem Bezier rasterizer (0: real cusps)
   float distTol;
-  float fringeWidth;
+  public float fringeWidth;
   float devicePxRatio;
   FONScontext* fs;
   NVGImage[NVG_MAX_FONTIMAGES] fontImages;
@@ -1648,6 +1650,9 @@ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   NVGContext ctx = cast(NVGContext)malloc(NVGcontextinternal.sizeof);
   if (ctx is null) goto error;
   memset(ctx, 0, NVGcontextinternal.sizeof);
+
+  ctx.angleTol = 0; // angle tolerance for McSeem Bezier rasterizer
+  ctx.cuspLimit = 0; // cusp limit for McSeem Bezier rasterizer (0: real cusps)
 
   ctx.contextAlive = true;
 
@@ -3785,8 +3790,6 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
 void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) nothrow @trusted @nogc {
   enum CollinearEPS = 0.00000001f; // 0.00001f;
   enum AngleTolEPS = 0.01f;
-  enum angleTol = 0.0f; // this should be made context parameter
-  enum CuspLimit = 0; // this should be made context parameter
 
   static float distSquared (in float x1, in float y1, in float x2, in float y2) pure nothrow @safe @nogc {
     pragma(inline, true);
@@ -3867,21 +3870,20 @@ void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in fl
     case 1:
       // p1,p2,p4 are collinear, p3 is significant
       if (d3*d3 <= ctx.tessTol*(dx*dx+dy*dy)) {
-        if (angleTol < AngleTolEPS) {
+        if (ctx.angleTol < AngleTolEPS) {
           nvg__addPoint(ctx, x23, y23, type);
           return;
-        }
-        // angle condition
-        float da1 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-nvg__atan2f(y3-y2, x3-x2));
-        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
-        if (da1 < angleTol) {
-          nvg__addPoint(ctx, x2, y2, type);
-          nvg__addPoint(ctx, x3, y3, type);
-          return;
-        }
-        static if (CuspLimit != 0) {
-          if (CuspLimit != 0.0) {
-            if (da1 > CuspLimit) {
+        } else {
+          // angle condition
+          float da1 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-nvg__atan2f(y3-y2, x3-x2));
+          if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+          if (da1 < ctx.angleTol) {
+            nvg__addPoint(ctx, x2, y2, type);
+            nvg__addPoint(ctx, x3, y3, type);
+            return;
+          }
+          if (ctx.cuspLimit != 0.0) {
+            if (da1 > ctx.cuspLimit) {
               nvg__addPoint(ctx, x3, y3, type);
               return;
             }
@@ -3892,21 +3894,20 @@ void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in fl
     case 2:
       // p1,p3,p4 are collinear, p2 is significant
       if (d2*d2 <= ctx.tessTol*(dx*dx+dy*dy)) {
-        if (angleTol < AngleTolEPS) {
+        if (ctx.angleTol < AngleTolEPS) {
           nvg__addPoint(ctx, x23, y23, type);
           return;
-        }
-        // angle condition
-        float da1 = nvg__absf(nvg__atan2f(y3-y2, x3-x2)-nvg__atan2f(y2-y1, x2-x1));
-        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
-        if (da1 < angleTol) {
-          nvg__addPoint(ctx, x2, y2, type);
-          nvg__addPoint(ctx, x3, y3, type);
-          return;
-        }
-        static if (CuspLimit != 0) {
-          if (CuspLimit != 0.0) {
-            if (da1 > CuspLimit) {
+        } else {
+          // angle condition
+          float da1 = nvg__absf(nvg__atan2f(y3-y2, x3-x2)-nvg__atan2f(y2-y1, x2-x1));
+          if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+          if (da1 < ctx.angleTol) {
+            nvg__addPoint(ctx, x2, y2, type);
+            nvg__addPoint(ctx, x3, y3, type);
+            return;
+          }
+          if (ctx.cuspLimit != 0.0) {
+            if (da1 > ctx.cuspLimit) {
               nvg__addPoint(ctx, x2, y2, type);
               return;
             }
@@ -3918,28 +3919,27 @@ void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in fl
       // regular case
       if ((d2+d3)*(d2+d3) <= ctx.tessTol*(dx*dx+dy*dy)) {
         // if the curvature doesn't exceed the distance tolerance value, we tend to finish subdivisions
-        if (angleTol < AngleTolEPS) {
+        if (ctx.angleTol < AngleTolEPS) {
           nvg__addPoint(ctx, x23, y23, type);
           return;
-        }
-        // angle and cusp condition
-        immutable float k = nvg__atan2f(y3-y2, x3-x2);
-        float da1 = nvg__absf(k-nvg__atan2f(y2-y1, x2-x1));
-        float da2 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-k);
-        if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
-        if (da2 >= NVG_PI) da2 = 2*NVG_PI-da2;
-        if (da1+da2 < angleTol) {
-          // finally we can stop the recursion
-          nvg__addPoint(ctx, x23, y23, type);
-          return;
-        }
-        static if (CuspLimit != 0) {
-          if (CuspLimit != 0.0) {
-            if (da1 > CuspLimit) {
+        } else {
+          // angle and cusp condition
+          immutable float k = nvg__atan2f(y3-y2, x3-x2);
+          float da1 = nvg__absf(k-nvg__atan2f(y2-y1, x2-x1));
+          float da2 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-k);
+          if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+          if (da2 >= NVG_PI) da2 = 2*NVG_PI-da2;
+          if (da1+da2 < ctx.angleTol) {
+            // finally we can stop the recursion
+            nvg__addPoint(ctx, x23, y23, type);
+            return;
+          }
+          if (ctx.cuspLimit != 0.0) {
+            if (da1 > ctx.cuspLimit) {
               nvg__addPoint(ctx, x2, y2, type);
               return;
             }
-            if (da2 > CuspLimit) {
+            if (da2 > ctx.cuspLimit) {
               nvg__addPoint(ctx, x3, y3, type);
               return;
             }
