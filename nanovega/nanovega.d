@@ -3787,6 +3787,7 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
 }
 
 // based on the ideas and code of Maxim Shemanarev. Rest in Peace, bro!
+// see http://www.antigrain.com/research/adaptive_bezier/index.html
 void nvg__tesselateBezierMcSeem (NVGContext ctx, in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level, in int type) nothrow @trusted @nogc {
   enum CollinearEPS = 0.00000001f; // 0.00001f;
   enum AngleTolEPS = 0.01f;
