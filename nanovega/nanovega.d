@@ -1398,8 +1398,10 @@ public FONScontext* fonsContext (NVGContext ctx) { return (ctx !is null ? ctx.fs
 
 /** Bezier curve tesselator.
  *
- * De Casteljau Bezier tesselator is faster, but currently rasterizing curves with cusps wrong.
- * AFD tesselator is somewhat slower, but does cusps right. */
+ * De Casteljau Bezier tesselator is faster, but currently rasterizing curves with cusps sligtly wrong.
+ * It doesn't really matter in practice.
+ *
+ * AFD tesselator is somewhat slower, but does cusps better. */
 public enum NVGTesselation {
   DeCasteljau, /// default: standard well-known tesselation algorithm
   AFD, /// adaptive forward differencing
