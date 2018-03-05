@@ -1393,8 +1393,13 @@ void main () {
       if (sdwindow.closed) return;
       scope(exit) if (event.pressed) postNextFrame();
       if (event == "D-*-Q" || event == "D-Escape") { sdwindow.close(); return; }
-      if (event == "D-T") { blowup = !blowup; return; }
+      if (event == "D-Space") { blowup = !blowup; return; }
       if (event == "D-P") { premult = !premult; return; }
+      if (event == "D-T") {
+        nvg.tesselation = cast(NVGTesselation)(nvg.tesselation == NVGTesselation.max ? NVGTesselation.min : nvg.tesselation+1);
+        { import iv.vfs.io; writeln("bezier tesselator: ", nvg.tesselation); }
+        return;
+      }
       int newfps = -666;
       if (event == "D-1") newfps = 10;
       if (event == "D-2") newfps = 20;
