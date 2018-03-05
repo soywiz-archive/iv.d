@@ -65,6 +65,7 @@ void fatal (string msg) {
 // demo modes
 bool blowup = false;
 bool premult = false;
+bool cliptest = true;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -1116,7 +1117,7 @@ void drawBlendish (NVGContext nvg, float _x, float _y, float _w, float _h, float
   nvg.save();
   scope(exit) nvg.restore();
 
-  version(all) {
+  if (cliptest) {
     nvg.newPath();
     //nvg.rect(_x+50, _y+80, 160, 140);
     //nvg.roundedRect(_x+50, _y+80, 160, 140, 8);
@@ -1400,6 +1401,7 @@ void main () {
         { import iv.vfs.io; writeln("bezier tesselator: ", nvg.tesselation); }
         return;
       }
+      if (event == "D-C") { cliptest = !cliptest; return; }
       int newfps = -666;
       if (event == "D-1") newfps = 10;
       if (event == "D-2") newfps = 20;
