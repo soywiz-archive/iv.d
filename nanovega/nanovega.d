@@ -282,7 +282,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
     You can "untransform" picking coordinates before checking with [gpuUntransformPoint].
 
     $(WARNING Picking API completely ignores clipping. If you want to check for
-              clip regions, you have to manuall register them as fill/stroke pathes,
+              clip regions, you have to manuall register them as fill/stroke paths,
               and perform the necessary logic. See [hitTestForId] function.)
 
   clipping =
@@ -379,8 +379,8 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Calling [startRecording] without commiting or cancelling recoriding will commit.
 
     $(WARNING Text output is not recorded now. Neither is scissor, so if you are using
-               scissoring or text in your pathes (UI, for example), things will not
-               work as you may expect.)
+              scissoring or text in your paths (UI, for example), things will not
+              work as you may expect.)
  */
 module iv.nanovega.nanovega;
 private:
@@ -5648,7 +5648,7 @@ public int hitTestDG(bool bestOrder=false, DG) (NVGContext ctx, in float x, in f
   int celly = nvg__clamp(cast(int)(y/ps.ydim), 0, levelwidth);
   int npicked = 0;
 
-  // if we are interested only in most-toplevel path, there is no reason to check pathes with worser order.
+  // if we are interested only in most-toplevel path, there is no reason to check paths with worser order.
   // but we cannot just get out on the first path found, 'cause we are using quad tree to speed up bounds
   // checking, so path walking order is not guaranteed.
   static if (bestOrder) {
@@ -6296,7 +6296,7 @@ NVGpickPath* nvg__pickPathCreate (NVGContext context, const(float)[] acommands, 
     }
   }
 
-  // force-close filled pathes
+  // force-close filled paths
   if (psp !is null && !forStroke && hasPoints && !psp.closed) closeIt();
 
   pp.flags = (forStroke ? NVGPathFlags.Stroke : NVGPathFlags.Fill);
