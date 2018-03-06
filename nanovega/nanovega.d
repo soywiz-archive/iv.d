@@ -11812,9 +11812,11 @@ bool glnvg__allocFBO (GLNVGcontext* gl, int fidx, bool doclear=true) nothrow @tr
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glnvg__checkError(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_WRAP_T");
   //FIXME: linear or nearest?
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glnvg__checkError(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_MIN_FILTER");
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glnvg__checkError(gl, "glnvg__allocFBO: glTexParameterf: GL_TEXTURE_MAG_FILTER");
   // empty texture
   //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, gl.fboWidth, gl.fboHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, null);
@@ -12093,6 +12095,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     uniform vec4 frag[UNIFORM_ARRAY_SIZE];
     uniform sampler2D tex;
     uniform sampler2D clipTex;
+    uniform vec2 viewSize;
     varying vec2 ftcoord;
     varying vec2 fpos;
     #define scissorMat mat3(frag[0].xyz, frag[1].xyz, frag[2].xyz)
@@ -12135,7 +12138,8 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
     void main (void) {
       // clipping
       if (doclip != 0) {
-        vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+        /*vec4 clr = texelFetch(clipTex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);*/
+        vec4 clr = texture2D(clipTex, vec2(gl_FragCoord.x/viewSize.x, gl_FragCoord.y/viewSize.y));
         if (clr.r == 0.0) discard;
       }
       float scissor = scissorMask(fpos);
@@ -12209,6 +12213,7 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
   };
 
   enum clipFragShaderFill = q{
+    uniform vec2 viewSize;
     void main (void) {
       gl_FragColor = vec4(1, 1, 1, 1);
     }
@@ -12224,8 +12229,10 @@ bool glnvg__renderCreate (void* uptr) nothrow @trusted @nogc {
 
   enum clipFragShaderCopy = q{
     uniform sampler2D tex;
+    uniform vec2 viewSize;
     void main (void) {
-      gl_FragColor = texelFetch(tex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+      //gl_FragColor = texelFetch(tex, ivec2(int(gl_FragCoord.x), int(gl_FragCoord.y)), 0);
+      gl_FragColor = texture2D(tex, vec2(gl_FragCoord.x/viewSize.x, gl_FragCoord.y/viewSize.y));
     }
   };
 
