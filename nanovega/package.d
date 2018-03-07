@@ -36,3 +36,4 @@
 module iv.nanovega /*is aliced*/;
 
 public import iv.nanovega.nanovega;
+public import iv.nanovega.util;
