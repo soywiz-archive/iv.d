@@ -39,10 +39,13 @@ protected:
       nvg = nvgCreateContext(cast(NVGContextFlag)nvgInitFlags);
       if (nvg is null) assert(0, "cannot initialize NanoVega");
       if (onInitOpenGL !is null) onInitOpenGL(this, nvg);
+      flushGui();
     };
     redrawOpenGlScene = delegate () {
       if (width < 1 || height < 1 || closed) return;
       if (onRedraw !is null && nvg !is null) {
+        setAsCurrentOpenGlContext();
+        scope(exit) releaseCurrentOpenGlContext();
         glViewport(0, 0, width, height);
         onRedraw(this, nvg);
       }
@@ -63,8 +66,12 @@ public:
   }
 
   override void close () {
-    if (!closed && onDeinitOpenGL !is null && nvg !is null) onDeinitOpenGL(this, nvg);
-    nvg.kill();
+    if (!closed && nvg !is null) {
+      setAsCurrentOpenGlContext();
+      scope(exit) { flushGui(); releaseCurrentOpenGlContext(); }
+      if (onDeinitOpenGL !is null) onDeinitOpenGL(this, nvg);
+      nvg.kill();
+    }
     super.close();
   }
 
