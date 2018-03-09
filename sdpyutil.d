@@ -2213,6 +2213,1505 @@ public:
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+// some "fastgfx" backend
+/+
+class SdpyAADrawBase(RendT) if (is(RT : Renderer!ST, ST)) {
+protected:
+  static T abs(T) (T n) pure nothrow @safe @nogc { pragma(inline, true); return (n < 0 ? -n : n); }
+
+  version(Windows) {
+    private static int lrintf (float f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5f); }
+    private static int lrintd (double f) nothrow @trusted @nogc { pragma(inline, true); return cast(int)(f+0.5); }
+  } else {
+    private import core.stdc.math : lrintf, lrintd = lrint;
+  }
+  private import core.stdc.math : sqrtf, sqrtd = sqrt;
+  private import core.stdc.math : floorf, floord = floor;
+  private import core.stdc.math : cosf, sinf;
+
+public:
+  GxSize dim;
+  GxRect clip;
+  RendT rend;
+
+protected nothrow @trusted @nogc: // low-level methods; will always be called with valid coords
+  // must be overriden
+  // optionals
+  final void hline (int x, int y, int len, Color c) {
+    while (len-- > 0) rend.putPixel(x++, y, c);
+  }
+
+  final void vline (int x, int y, int len, Color c) {
+    while (len-- > 0) rend.putPixel(x, y++, c);
+  }
+
+  final void fillrc (int x, int y, int w, int h, Color c) {
+    while (h-- > 0) hline(x, y++, w, c);
+  }
+
+protected:
+  Rasterizer rast;
+  float tessTol = 0.25f;
+  float angleTol = 0.0f; // 0.0f -- angle tolerance for McSeem Bezier rasterizer
+  float cuspLimit = 0; // 0 -- cusp limit for McSeem Bezier rasterizer (0: real cusps)
+
+public nothrow @trusted @nogc:
+  this (int awdt, int ahgt) {
+    if (awdt < 0) awdt = 0;
+    if (ahgt < 0) ahgt = 0;
+    dim = GxSize(awdt, ahgt);
+    clip = GxRect(dim);
+    rend.reset();
+    rend.moveTo(0, 0);
+  }
+
+  final @property int width () const pure nothrow @safe @nogc { pragma(inline, true); return dim.width; }
+  final @property int height () const pure nothrow @safe @nogc { pragma(inline, true); return dim.height; }
+
+  void cls (Color clr=Color.white) { rend.clear(clr); beginPath(); }
+
+  // can return null, yeah
+  TrueColorImage getBuffer () { return null; }
+
+final:
+  Color getPixel (int x, int y) {
+    pragma(inline, true);
+    return (x >= 0 && y >= 0 && x < dim.width && y < dim.height && clip.inside(x, y) ? rend.getPixel(x, y) : Color.transparent);
+  }
+
+  void putPixel (int x, int y, Color c) {
+    pragma(inline, true);
+    if (x >= 0 && y >= 0 && x < dim.width && y < dim.height && clip.inside(x, y)) rend.putPixel(x, y, c);
+  }
+
+  // ////////////////////////////////////////////////////////////////////////// //
+  // based on the ideas and code of Maxim Shemanarev. Rest in Peace, bro!
+  // see http://www.antigrain.com/research/adaptive_bezier/index.html
+  private void nvg__tesselateBezierMcSeem (in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level/*, in int type*/) {
+    enum CollinearEPS = 0.00000001f; // 0.00001f;
+    enum AngleTolEPS = 0.01f;
+
+    static float distSquared (in float x1, in float y1, in float x2, in float y2) pure nothrow @safe @nogc {
+      pragma(inline, true);
+      immutable float dx = x2-x1;
+      immutable float dy = y2-y1;
+      return dx*dx+dy*dy;
+    }
+
+    if (level == 0) {
+      rast.lineTo(x1, y1/*, 0*/);
+      nvg__tesselateBezierMcSeem(ctx, x1, y1, x2, y2, x3, y3, x4, y4, 1/*, type*/);
+      rast.lineTo(x4, y4/*, type*/);
+      return;
+    }
+
+    if (level >= 32) return; // recurse limit; practically, it should be never reached, but...
+
+    // calculate all the mid-points of the line segments
+    immutable float x12 = (x1+x2)*0.5f;
+    immutable float y12 = (y1+y2)*0.5f;
+    immutable float x23 = (x2+x3)*0.5f;
+    immutable float y23 = (y2+y3)*0.5f;
+    immutable float x34 = (x3+x4)*0.5f;
+    immutable float y34 = (y3+y4)*0.5f;
+    immutable float x123 = (x12+x23)*0.5f;
+    immutable float y123 = (y12+y23)*0.5f;
+    immutable float x234 = (x23+x34)*0.5f;
+    immutable float y234 = (y23+y34)*0.5f;
+    immutable float x1234 = (x123+x234)*0.5f;
+    immutable float y1234 = (y123+y234)*0.5f;
+
+    // try to approximate the full cubic curve by a single straight line
+    immutable float dx = x4-x1;
+    immutable float dy = y4-y1;
+
+    float d2 = nvg__absf(((x2-x4)*dy-(y2-y4)*dx));
+    float d3 = nvg__absf(((x3-x4)*dy-(y3-y4)*dx));
+
+    final switch ((cast(int)(d2 > CollinearEPS)<<1)+cast(int)(d3 > CollinearEPS)) {
+      case 0:
+        // all collinear or p1 == p4
+        float k = dx*dx+dy*dy;
+        if (k == 0) {
+          d2 = distSquared(x1, y1, x2, y2);
+          d3 = distSquared(x4, y4, x3, y3);
+        } else {
+          k = 1.0f/k;
+          float da1 = x2-x1;
+          float da2 = y2-y1;
+          d2 = k*(da1*dx+da2*dy);
+          da1 = x3-x1;
+          da2 = y3-y1;
+          d3 = k*(da1*dx+da2*dy);
+          if (d2 > 0 && d2 < 1 && d3 > 0 && d3 < 1) {
+            // Simple collinear case, 1---2---3---4
+            // We can leave just two endpoints
+            return;
+          }
+               if (d2 <= 0) d2 = distSquared(x2, y2, x1, y1);
+          else if (d2 >= 1) d2 = distSquared(x2, y2, x4, y4);
+          else d2 = distSquared(x2, y2, x1+d2*dx, y1+d2*dy);
+
+               if (d3 <= 0) d3 = distSquared(x3, y3, x1, y1);
+          else if (d3 >= 1) d3 = distSquared(x3, y3, x4, y4);
+          else d3 = distSquared(x3, y3, x1+d3*dx, y1+d3*dy);
+        }
+        if (d2 > d3) {
+          if (d2 < ctx.tessTol) {
+            rast.lineTo(x2, y2/*, type*/);
+            return;
+          }
+        } if (d3 < ctx.tessTol) {
+          rast.lineTo(x3, y3/*, type*/);
+          return;
+        }
+        break;
+      case 1:
+        // p1,p2,p4 are collinear, p3 is significant
+        if (d3*d3 <= ctx.tessTol*(dx*dx+dy*dy)) {
+          if (ctx.angleTol < AngleTolEPS) {
+            rast.lineTo(x23, y23/*, type*/);
+            return;
+          } else {
+            // angle condition
+            float da1 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-nvg__atan2f(y3-y2, x3-x2));
+            if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+            if (da1 < ctx.angleTol) {
+              rast.lineTo(x2, y2/*, type*/);
+              rast.lineTo(x3, y3/*, type*/);
+              return;
+            }
+            if (ctx.cuspLimit != 0.0) {
+              if (da1 > ctx.cuspLimit) {
+                rast.lineTo(x3, y3/*, type*/);
+                return;
+              }
+            }
+          }
+        }
+        break;
+      case 2:
+        // p1,p3,p4 are collinear, p2 is significant
+        if (d2*d2 <= ctx.tessTol*(dx*dx+dy*dy)) {
+          if (ctx.angleTol < AngleTolEPS) {
+            rast.lineTo(x23, y23/*, type*/);
+            return;
+          } else {
+            // angle condition
+            float da1 = nvg__absf(nvg__atan2f(y3-y2, x3-x2)-nvg__atan2f(y2-y1, x2-x1));
+            if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+            if (da1 < ctx.angleTol) {
+              rast.lineTo(x2, y2/*, type*/);
+              rast.lineTo(x3, y3/*, type*/);
+              return;
+            }
+            if (ctx.cuspLimit != 0.0) {
+              if (da1 > ctx.cuspLimit) {
+                rast.lineTo(x2, y2/*, type*/);
+                return;
+              }
+            }
+          }
+        }
+        break;
+      case 3:
+        // regular case
+        if ((d2+d3)*(d2+d3) <= ctx.tessTol*(dx*dx+dy*dy)) {
+          // if the curvature doesn't exceed the distance tolerance value, we tend to finish subdivisions
+          if (ctx.angleTol < AngleTolEPS) {
+            rast.lineTo(x23, y23/*, type*/);
+            return;
+          } else {
+            // angle and cusp condition
+            immutable float k = nvg__atan2f(y3-y2, x3-x2);
+            float da1 = nvg__absf(k-nvg__atan2f(y2-y1, x2-x1));
+            float da2 = nvg__absf(nvg__atan2f(y4-y3, x4-x3)-k);
+            if (da1 >= NVG_PI) da1 = 2*NVG_PI-da1;
+            if (da2 >= NVG_PI) da2 = 2*NVG_PI-da2;
+            if (da1+da2 < ctx.angleTol) {
+              // finally we can stop the recursion
+              rast.lineTo(x23, y23/*, type*/);
+              return;
+            }
+            if (ctx.cuspLimit != 0.0) {
+              if (da1 > ctx.cuspLimit) {
+                rast.lineTo(x2, y2/*, type*/);
+                return;
+              }
+              if (da2 > ctx.cuspLimit) {
+                rast.lineTo(x3, y3/*, type*/);
+                return;
+              }
+            }
+          }
+        }
+        break;
+    }
+
+    // continue subdivision
+    nvg__tesselateBezierMcSeem(x1, y1, x12, y12, x123, y123, x1234, y1234, level+1/*, 0*/);
+    nvg__tesselateBezierMcSeem(x1234, y1234, x234, y234, x34, y34, x4, y4, level+1/*, type*/);
+  }
+
+  @property float curX () const pure { pragma(inline, true); return rast.curX; }
+  @property float curY () const pure { pragma(inline, true); return rast.curY; }
+
+  void beginPath () { pragma(inline, true); rast.reset(); rast.moveTo(0, 0); }
+
+  void moveTo (in float x, in float y) { pragma(inline, true); rast.moveTo(x, y); }
+  void lineTo (in float x, in float y) { pragma(inline, true); rast.lineTo(x, y); }
+
+  void bezierTo (in float x2, in float y2, in float x3, in float y3, in float x4, in float y4) {
+    pragma(inline, true);
+    nvg__tesselateBezierMcSeem(curX, curY, x2, y2, x3, y3, x4, y4);
+  }
+
+  void quadTo (in float cx, in float cy, in float x, in float y) {
+    immutable float x0 = curX;
+    immutable float y0 = curY;
+    bezierTo(
+      x0+2.0f/3.0f*(cx-x0), y0+2.0f/3.0f*(cy-y0),
+      x+2.0f/3.0f*(cx-x), y+2.0f/3.0f*(cy-y),
+      x, y,
+    );
+  }
+
+  void fill (in Color c) {
+    pragma(inline, true);
+    rast.render(rend, c);
+  }
+
+  // ////////////////////////////////////////////////////////////////////////// //
+  enum BaphometDims = 512; // [0..511]
+  final void renderBaphomet (in Color fc, float ofsx=0, float ofsy=0, float scalex=1, float scaley=1) {
+    auto path = cast(const(ubyte)[])baphometPath;
+    immutable plen = path.length;
+    uint ppos = 0;
+
+    void drawLine (float x1, float y1, float x2, float y2, float width=0.2) {
+      import std.math : sqrt;
+      float dx = x2-x1;
+      float dy = y2-y1;
+      immutable float d = sqrtf(dx*dx+dy*dy);
+
+      dx = width*(y2-y1)/d;
+      dy = width*(x2-x1)/d;
+
+      rast.moveTo(x1-dx, y1+dy);
+      rast.lineTo(x2-dx, y2+dy);
+      rast.lineTo(x2+dx, y2-dy);
+      rast.lineTo(x1+dx, y1-dy);
+    }
+
+    enum Command {
+      Bounds, // always first, has 4 args (x0, y0, x1, y1)
+      StrokeMode,
+      FillMode,
+      StrokeFillMode,
+      NormalStroke,
+      ThinStroke,
+      MoveTo,
+      LineTo,
+      CubicTo, // cubic bezier
+      EndPath,
+    }
+
+    Command getCommand () nothrow @trusted @nogc {
+      if (ppos >= plen) assert(0, "invalid path");
+      return cast(Command)(path.ptr[ppos++]);
+    }
+
+    float getFloat () nothrow @trusted @nogc {
+      if (ppos >= plen || plen-ppos < float.sizeof) assert(0, "invalid path");
+      version(LittleEndian) {
+        float res = *cast(const(float)*)(&path.ptr[ppos]);
+        ppos += cast(uint)float.sizeof;
+        return res;
+      } else {
+        static assert(float.sizeof == 4);
+        uint xp = path.ptr[ppos]|(path.ptr[ppos+1]<<8)|(path.ptr[ppos+2]<<16)|(path.ptr[ppos+3]<<24);
+        ppos += cast(uint)float.sizeof;
+        return *cast(const(float)*)(&xp);
+      }
+    }
+
+    int scaleX (float v) nothrow @trusted @nogc { pragma(inline, true); return lrintf(ofsx+v*scalex); }
+    int scaleY (float v) nothrow @trusted @nogc { pragma(inline, true); return lrintf(ofsy+v*scaley); }
+
+    int cx = 0, cy = 0;
+    bool doStroke = false, doFill = false;
+    while (ppos < plen) {
+      auto cmd = getCommand();
+      final switch (cmd) {
+        case Command.Bounds: ppos += 4*cast(uint)float.sizeof; break;
+        case Command.StrokeMode: doStroke = true; doFill = false; break;
+        case Command.FillMode: doStroke = false; doFill = true;
+        case Command.StrokeFillMode: break;
+        case Command.NormalStroke: case Command.ThinStroke: break;
+        case Command.MoveTo:
+          cx = scaleX(getFloat());
+          cy = scaleY(getFloat());
+          rast.moveTo(cx, cy);
+          break;
+        case Command.LineTo:
+          immutable int ex = scaleX(getFloat());
+          immutable int ey = scaleY(getFloat());
+          if (doFill) rast.lineTo(ex, ey); else if (doStroke) drawLine(cx, cy, ex, ey, fc);
+          cx = ex;
+          cy = ey;
+          break;
+        case Command.CubicTo: // cubic bezier
+          immutable int x1 = scaleX(getFloat());
+          immutable int y1 = scaleY(getFloat());
+          immutable int x2 = scaleX(getFloat());
+          immutable int y2 = scaleY(getFloat());
+          immutable int ex = scaleX(getFloat());
+          immutable int ey = scaleY(getFloat());
+          if (doFill) drawCubicBezier(cx, cy, x1, y1, x2, y2, ex, ey, fc);
+          cx = ex;
+          cy = ey;
+          break;
+        case Command.EndPath: // don't close this path
+          break;
+      }
+    }
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+private:
+/* *****************************************************************************
+  Anti-Grain Geometry - Version 2.1 Lite
+  Copyright (C) 2002-2003 Maxim Shemanarev (McSeem)
+
+  Permission to copy, use, modify, sell and distribute this software
+  is granted provided this copyright notice appears in all copies.
+  This software is provided "as is" without express or implied
+  warranty, and with no claim as to its suitability for any purpose.
+
+  The author gratefully acknowleges the support of David Turner,
+  Robert Wilhelm, and Werner Lemberg - the authors of the FreeType
+  libray - in producing this work. See http://www.freetype.org for details.
+
+  Initially the rendering algorithm was designed by David Turner and the
+  other authors of the FreeType library - see the above notice. I nearly
+  created a similar renderer, but still I was far from David's work.
+  I completely redesigned the original code and adapted it for Anti-Grain
+  ideas. Two functions - renderLine and renderScanLine are the core of
+  the algorithm - they calculate the exact coverage of each pixel cell
+  of the polygon. I left these functions almost as is, because there's
+  no way to improve the perfection - hats off to David and his group!
+
+  All other code is very different from the original.
+***************************************************************************** */
+struct RenderingBuffer {
+private:
+  ubyte* mBuf; // Pointer to renrdering buffer
+  ubyte** mRows; // Pointers to each row of the buffer
+  uint mWidth; // Width in pixels
+  uint mHeight; // Height in pixels
+  int mStride; // Number of bytes per row. Can be < 0
+  uint mMaxHeight; // Maximal current height
+
+public nothrow @trusted @nogc:
+  @disable this (this); // no copies
+
+  this (ubyte* buf, uint width, uint height, int stride) {
+    attach(buf, width, height, stride);
+  }
+
+  ~this () {
+    import core.stdc.stdlib : free;
+    free(mRows);
+  }
+
+  void attach (ubyte* buf, uint width, uint height, int stride) {
+    import core.stdc.stdlib : realloc;
+    if (width < 1 || height < 1 || width > short.max || height > short.max) assert(0, "invalid rendering buffer dimensions");
+    mBuf = buf;
+    mWidth = width;
+    mHeight = height;
+    mStride = stride;
+    if (height > mMaxHeight || mRows is null) {
+      mRows = cast(ubyte**)realloc(mRows, (ubyte*).sizeof*height);
+      if (mRows is null) assert(0, "out of memory");
+    }
+
+    ubyte* rowPtr = mBuf;
+    if (stride < 0) rowPtr = mBuf-cast(int)(height-1)*stride;
+
+    ubyte** rows = mRows;
+    while (height--) {
+      *rows++ = rowPtr;
+      rowPtr += stride;
+    }
+  }
+
+  @property inout(ubyte)* buf () inout pure { pragma(inline, true); return mBuf; }
+  uint width () const pure { pragma(inline, true); return mWidth; }
+  uint height () const pure { pragma(inline, true); return mHeight; }
+  int stride () const pure { pragma(inline, true); return mStride; }
+
+  bool inbox (int x, int y) const pure { pragma(inline, true); return (x >= 0 && y >= 0 && x < cast(int)mWidth && y < cast(int)mHeight); }
+
+  uint absStride() const pure { pragma(inline, true); return (mStride < 0 ? cast(uint)(-mStride) : cast(uint)mStride); }
+
+  inout(ubyte)* row (uint y) inout pure { pragma(inline, true); return (y < mHeight ? mRows[y] : null); }
+
+  inout(ubyte)[] opSlice () inout pure { pragma(inline, true); return mBuf[0..mHeight*absStride]; }
+}
+
+
+struct ScanLine {
+private:
+  int mMinX;
+  uint mMaxLen;
+  int mDX;
+  int mDY;
+  int mLastX = 0x7fff;
+  int mLastY = 0x7fff;
+  ubyte* mCovers;
+  ubyte** mStartPtrs;
+  ushort* mCounts;
+  uint mNumSpans;
+  ubyte** mCurStartPtr;
+  ushort* mCurCount;
+
+public:
+  enum { AAShift = 8 }
+
+  static struct Iterator {
+  private:
+    const(ubyte)* mCovers;
+    const(ushort)* mCurCount;
+    const(ubyte*)* mCurStartPtr;
+
+  public nothrow @trusted @nogc:
+    @disable this (this); // no copies
+
+    this (in ref ScanLine sl) {
+      mCovers = sl.mCovers;
+      mCurCount = sl.mCounts;
+      mCurStartPtr = sl.mStartPtrs;
+    }
+
+    int next () {
+      ++mCurCount;
+      ++mCurStartPtr;
+      return cast(int)(*mCurStartPtr-mCovers);
+    }
+
+    @property int numPix () const pure { pragma(inline, true); return cast(int)(*mCurCount); }
+    @property const(ubyte)* covers () const pure { pragma(inline, true); return *mCurStartPtr; }
+  }
+
+public nothrow @trusted @nogc:
+  @disable this (this); // no copies
+
+  ~this () {
+    import core.stdc.stdlib : free;
+    free(mCounts);
+    free(mStartPtrs);
+    free(mCovers);
+  }
+
+  auto iterator () const { pragma(inline, true); return Iterator(this); }
+
+  void reset (int minX, int maxX, int dx=0, int dy=0) {
+    uint maxLen = maxX-minX+2;
+    if (maxLen > mMaxLen) {
+      import core.stdc.stdlib : realloc;
+      mCovers = cast(ubyte*)realloc(mCovers, maxLen);
+      if (mCovers is null) assert(0, "out of memory");
+      mStartPtrs = cast(ubyte**)realloc(mStartPtrs, (ubyte*).sizeof*maxLen);
+      if (mStartPtrs is null) assert(0, "out of memory");
+      mCounts = cast(ushort*)realloc(mCounts, ushort.sizeof*maxLen);
+      if (mCounts is null) assert(0, "out of memory");
+      mMaxLen = maxLen;
+    }
+    mDX = dx;
+    mDY = dy;
+    mLastX = 0x7fff;
+    mLastY = 0x7fff;
+    mMinX = minX;
+    mCurCount = mCounts;
+    mCurStartPtr = mStartPtrs;
+    mNumSpans = 0;
+  }
+
+  void resetSpans () {
+    pragma(inline, true);
+    mLastX = 0x7fff;
+    mLastY = 0x7fff;
+    mCurCount = mCounts;
+    mCurStartPtr = mStartPtrs;
+    mNumSpans = 0;
+  }
+
+  void addSpan (int x, int y, uint num, uint cover) {
+    import core.stdc.string : memset;
+    x -= mMinX;
+    memset(mCovers+x, cover, num);
+    if (x == mLastX+1) {
+      (*mCurCount) += cast(ushort)num;
+    } else {
+      *++mCurCount = cast(ushort)num;
+      *++mCurStartPtr = mCovers+x;
+      ++mNumSpans;
+    }
+    mLastX = x+num-1;
+    mLastY = y;
+  }
+
+  void addCell (int x, int y, uint cover) {
+    x -= mMinX;
+    mCovers[x] = cast(ubyte)cover;
+    if (x == mLastX+1) {
+      ++(*mCurCount);
+    } else {
+      *++mCurCount = 1;
+      *++mCurStartPtr = mCovers+x;
+      ++mNumSpans;
+    }
+    mLastX = x;
+    mLastY = y;
+  }
+
+  @property bool isReady (int y) const pure { pragma(inline, true); return (mNumSpans && (y^mLastY)); }
+  @property int baseX () const pure { pragma(inline, true); return mMinX+mDX; }
+  @property int y () const pure { pragma(inline, true); return mLastY+mDY; }
+  @property uint numSpans () const pure { pragma(inline, true); return mNumSpans; }
+}
+
+
+public template isGoodSpan(T) {
+  static if (is(T == struct)) {
+    enum isGoodSpan = is(typeof((){
+      T span;
+      span.render(cast(ubyte*)0x29a, cast(int)0x29a, cast(uint)0x29a, cast(const(ubyte)*)0x29a, Color.red);
+      span.hline(cast(ubyte*)0x29a, cast(int)0x29a, cast(uint)0x29a, Color.red);
+      Color c = span.get(cast(const(ubyte)*)0x29a, cast(int)0x29a);
+      // we should be able to copy it
+      T spanNew = span;
+    }));
+  } else {
+    enum isGoodSpan = false;
+  }
+}
+
+public struct Renderer(Span) if (isGoodSpan!Span) {
+private:
+  RenderingBuffer mRBuf;
+  Span mSpan;
+
+public nothrow @trusted @nogc:
+  this (ubyte* abuf, uint awidth, uint aheight, int astride) { mRBuf.attach(abuf, awidth, aheight, astride); }
+
+  void attach (ubyte* abuf, uint awidth, uint aheight, int astride) { mRBuf.attach(abuf, awidth, aheight, astride); }
+
+  void clear (in Color c) {
+    foreach (immutable uint y; 0..mRBuf.height) {
+      mSpan.hline(mRBuf.row(y), 0, mRBuf.width, c);
+    }
+  }
+
+  void setPixel (int x, int y, in Color c) {
+    if (mRBuf.inbox(x, y)) {
+      mSpan.hline(mRBuf.row(y), x, 1, c);
+    }
+  }
+
+  Color getPixel (int x, int y) const pure { pragma(inline, true); return (mRBuf.inbox(x, y) ? mSpan.get(mRBuf.row(y), x) : Color.transparent); }
+
+  @property int width () const pure { pragma(inline, true); return mRBuf.width; }
+  @property int height () const pure { pragma(inline, true); return mRBuf.height; }
+
+  void render (in ref ScanLine sl, in Color c) {
+    if (sl.y < 0 || sl.y >= cast(int)mRBuf.height) return;
+    uint numSpans = sl.numSpans;
+    int baseX = sl.baseX;
+    ubyte* row = mRBuf.row(sl.y);
+    auto span = sl.iterator;
+    do {
+      int x = span.next+baseX;
+      const(ubyte)* covers = span.covers;
+      int numPix = span.numPix;
+      if (x < 0) {
+        numPix += x;
+        if (numPix <= 0) continue;
+        covers -= x;
+        x = 0;
+      }
+      if (x+numPix >= cast(int)mRBuf.width) {
+        numPix = mRBuf.width-x;
+        if (numPix <= 0) continue;
+      }
+      mSpan.render(row, x, numPix, covers, c);
+    } while (--numSpans);
+  }
+
+  inout(ubyte)[] opSlice () inout pure { pragma(inline, true); return mRBuf[]; }
+}
+
+
+/* *****************************************************************************
+  These constants determine the subpixel accuracy, to be more precise,
+  the number of bits of the fractional part of the coordinates.
+  The possible coordinate capacity in bits can be calculated by formula:
+  sizeof(int) * 8 - PolyBaseShift * 2, i.e, for 32-bit integers and
+  8-bits fractional part the capacity is 16 bits or [-32768...32767].
+***************************************************************************** */
+enum : uint {
+  PolyBaseShift = 8U,
+  PolyBaseSize = cast(uint)(1<<PolyBaseShift),
+  PolyBaseMask = cast(uint)(PolyBaseSize-1),
+}
+
+
+int polyCoord (in double c) pure nothrow @safe @nogc { pragma(inline, true); return cast(int)(c*PolyBaseSize); }
+
+
+// A pixel cell
+struct Cell {
+public:
+  short x, y;
+  int packedCoord;
+  int cover;
+  int area;
+
+public nothrow @trusted @nogc:
+  this (int cx, int cy, int c, int a) {
+    pragma(inline, true);
+    x = cast(short)cx;
+    y = cast(short)cy;
+    packedCoord = (cy<<16)+cx;
+    cover = c;
+    area = a;
+  }
+
+  void setCover (int c, int a) {
+    pragma(inline, true);
+    cover = c;
+    area = a;
+  }
+
+  void addCover (int c, int a) {
+    pragma(inline, true);
+    cover += c;
+    area += a;
+  }
+
+  void setCoord (int cx, int cy) {
+    pragma(inline, true);
+    x = cast(short)cx;
+    y = cast(short)cy;
+    packedCoord = (cy<<16)+cx;
+  }
+
+  void set (int cx, int cy, int c, int a) {
+    pragma(inline, true);
+    x = cast(short)cx;
+    y = cast(short)cy;
+    packedCoord = (cy<<16)+cx;
+    cover = c;
+    area = a;
+  }
+}
+
+
+// An internal class that implements the main rasterization algorithm. Used in the rasterizer. Should not be used direcly.
+struct Outline {
+private:
+  enum : uint {
+    CellBlockShift = 12U,
+    CellBlockSize = cast(uint)(1<<CellBlockShift),
+    CellBlockMask = cast(uint)(CellBlockSize-1),
+    CellBlockPool = 256U,
+    CellBlockLimit = 1024U,
+  }
+
+  enum QSortThreshold = 9;
+
+  enum : uint {
+    NotClosed = 1U,
+    SortRequired = 2U,
+  }
+
+private:
+  uint mNumBlocks;
+  uint mMaxBlocks;
+  uint mCurBlock;
+  uint mNumCells;
+  Cell** mCells;
+  Cell* mCurCellPtr;
+  Cell** mSortedCells;
+  uint mSortedSize;
+  Cell mCurCell = Cell(0x7fff, 0x7fff, 0, 0);
+  int mCurX;
+  int mCurY;
+  int mCloseX;
+  int mCloseY;
+  int mMinX = 0x7fffffff;
+  int mMinY = 0x7fffffff;
+  int mMaxX = -0x7fffffff;
+  int mMaxY = -0x7fffffff;
+  uint mFlags = SortRequired;
+
+public nothrow @trusted @nogc:
+  @disable this (this); // no copies
+
+  ~this () {
+    import core.stdc.stdlib : free;
+    free(mSortedCells);
+    if (mNumBlocks) {
+      Cell** ptr = mCells+mNumBlocks-1;
+      while (mNumBlocks--) {
+        free(*ptr);
+        --ptr;
+      }
+      free(mCells);
+    }
+  }
+
+  void reset () {
+    mNumCells = 0;
+    mCurBlock = 0;
+    mCurCell.set(0x7fff, 0x7fff, 0, 0);
+    mFlags |= SortRequired;
+    mFlags &= ~NotClosed;
+    mMinX = 0x7fffffff;
+    mMinY = 0x7fffffff;
+    mMaxX = -0x7fffffff;
+    mMaxY = -0x7fffffff;
+  }
+
+  void moveTo (int x, int y) {
+    if ((mFlags&SortRequired) == 0) reset();
+    if (mFlags&NotClosed) lineTo(mCloseX, mCloseY);
+    setCurCell(x>>PolyBaseShift, y>>PolyBaseShift);
+    mCloseX = mCurX = x;
+    mCloseY = mCurY = y;
+  }
+
+  void lineTo (int x, int y) {
+    if ((mFlags&SortRequired) && ((mCurX^x)|(mCurY^y))) {
+      int c = mCurX>>PolyBaseShift;
+      if (c < mMinX) mMinX = c;
+      ++c;
+      if (c > mMaxX) mMaxX = c;
+
+      c = x>>PolyBaseShift;
+      if (c < mMinX) mMinX = c;
+      ++c;
+      if (c > mMaxX) mMaxX = c;
+
+      renderLine(mCurX, mCurY, x, y);
+      mCurX = x;
+      mCurY = y;
+      mFlags |= NotClosed;
+    }
+  }
+
+  @property double curX () const pure { pragma(inline, true); return cast(double)mCurX/cast(double)PolyBaseSize; }
+  @property double curY () const pure { pragma(inline, true); return cast(double)mCurY/cast(double)PolyBaseSize; }
+
+  @property int minX () const pure { pragma(inline, true); return mMinX; }
+  @property int minY () const pure { pragma(inline, true); return mMinY; }
+  @property int maxX () const pure { pragma(inline, true); return mMaxX; }
+  @property int maxY () const pure { pragma(inline, true); return mMaxY; }
+
+  @property uint numCells () const pure { pragma(inline, true); return mNumCells; }
+
+  const(Cell)** cells () {
+    if (mFlags&NotClosed) {
+      lineTo(mCloseX, mCloseY);
+      mFlags &= ~NotClosed;
+    }
+    // perform sort only the first time
+    if (mFlags&SortRequired) {
+      addCurCell();
+      if (mNumCells == 0) return null;
+      sortCells();
+      mFlags &= ~SortRequired;
+    }
+    return cast(const(Cell)**)mSortedCells;
+  }
+
+private:
+  void allocateBlock () {
+    import core.stdc.stdlib : realloc;
+    if (mCurBlock >= mNumBlocks) {
+      import core.stdc.string : memset;
+      if (mNumBlocks >= mMaxBlocks) {
+        Cell** newCells = cast(Cell**)realloc(mCells, (mMaxBlocks+CellBlockPool)*(Cell*).sizeof);
+        if (newCells is null) assert(0, "out of memory");
+        mCells = newCells;
+        mMaxBlocks += CellBlockPool;
+      }
+      auto cc = cast(Cell*)realloc(null, Cell.sizeof*CellBlockSize);
+      if (cc is null) assert(0, "out of memory");
+      memset(cc, 0, Cell.sizeof*CellBlockSize);
+      foreach (ref c; cc[0..CellBlockSize]) c = Cell.init;
+      mCells[mNumBlocks++] = cc;
+    }
+    mCurCellPtr = mCells[mCurBlock++];
+  }
+
+  void addCurCell () {
+    if (mCurCell.area|mCurCell.cover) {
+      if ((mNumCells&CellBlockMask) == 0) {
+        if (mNumBlocks >= CellBlockLimit) return;
+        allocateBlock();
+      }
+      *mCurCellPtr++ = mCurCell;
+      ++mNumCells;
+    }
+  }
+
+  void setCurCell (int x, int y) {
+    if (mCurCell.packedCoord != (y<<16)+x) {
+      addCurCell();
+      mCurCell.set(x, y, 0, 0);
+    }
+  }
+
+  void renderScanLine (int ey, int x1, int y1, int x2, int y2) {
+    int ex1 = x1>>PolyBaseShift;
+    int ex2 = x2>>PolyBaseShift;
+    int fx1 = x1&PolyBaseMask;
+    int fx2 = x2&PolyBaseMask;
+
+    int delta, p, first, dx;
+    int incr, lift, mod, rem;
+
+    // trivial case; happens often
+    if (y1 == y2) {
+      setCurCell(ex2, ey);
+      return;
+    }
+
+    // everything is located in a single cell: that is easy!
+    if (ex1 == ex2) {
+      delta = y2-y1;
+      mCurCell.addCover(delta, (fx1+fx2)*delta);
+      return;
+    }
+
+    // ok, we'll have to render a run of adjacent cells on the same scanline...
+    p = (PolyBaseSize-fx1)*(y2-y1);
+    first = PolyBaseSize;
+    incr = 1;
+
+    dx = x2-x1;
+
+    if (dx < 0) {
+      p = fx1*(y2-y1);
+      first = 0;
+      incr = -1;
+      dx = -dx;
+    }
+
+    delta = p/dx;
+    mod = p%dx;
+
+    if (mod < 0) {
+      --delta;
+      mod += dx;
+    }
+
+    mCurCell.addCover(delta, (fx1+first)*delta);
+
+    ex1 += incr;
+    setCurCell(ex1, ey);
+    y1 += delta;
+
+    if (ex1 != ex2) {
+      p = PolyBaseSize*(y2-y1+delta);
+      lift = p/dx;
+      rem = p%dx;
+
+      if (rem < 0) {
+        --lift;
+        rem += dx;
+      }
+
+      mod -= dx;
+
+      while (ex1 != ex2) {
+        delta = lift;
+        mod += rem;
+        if (mod >= 0) {
+          mod -= dx;
+          ++delta;
+        }
+        mCurCell.addCover(delta, PolyBaseSize*delta);
+        y1 += delta;
+        ex1 += incr;
+        setCurCell(ex1, ey);
+      }
+    }
+
+    delta = y2-y1;
+    mCurCell.addCover(delta, (fx2+PolyBaseSize-first)*delta);
+  }
+
+  void renderLine (int x1, int y1, int x2, int y2) {
+    int ey1 = y1>>PolyBaseShift;
+    int ey2 = y2>>PolyBaseShift;
+    int fy1 = y1&PolyBaseMask;
+    int fy2 = y2&PolyBaseMask;
+
+    int dx, dy, xFrom, xTo;
+    int p, rem, mod, lift, delta, first, incr;
+
+    if (ey1 < mMinY) mMinY = ey1;
+    if (ey1+1 > mMaxY) mMaxY = ey1+1;
+    if (ey2 < mMinY) mMinY = ey2;
+    if (ey2+1 > mMaxY) mMaxY = ey2+1;
+
+    dx = x2-x1;
+    dy = y2-y1;
+
+    // everything is on a single scanline
+    if (ey1 == ey2) {
+      renderScanLine(ey1, x1, fy1, x2, fy2);
+      return;
+    }
+
+    // vertical line: we have to calculate start and end cells,
+    // and then the common values of the area and coverage for
+    // all cells of the line. we know exactly there's only one
+    // cell, so, we don't have to call renderScanLine().
+    incr  = 1;
+    if (dx == 0) {
+      int ex = x1>>PolyBaseShift;
+      int twoFx = (x1-(ex<<PolyBaseShift))<<1;
+      int area;
+
+      first = PolyBaseSize;
+      if (dy < 0) {
+        first = 0;
+        incr = -1;
+      }
+
+      xFrom = x1;
+
+      //renderScanLine(ey1, xFrom, fy1, xFrom, first);
+      delta = first-fy1;
+      mCurCell.addCover(delta, twoFx*delta);
+
+      ey1 += incr;
+      setCurCell(ex, ey1);
+
+      delta = first+first-PolyBaseSize;
+      area = twoFx*delta;
+      while (ey1 != ey2) {
+        //renderScanLine(ey1, xFrom, PolyBaseSize - first, xFrom, first);
+        mCurCell.setCover(delta, area);
+        ey1 += incr;
+        setCurCell(ex, ey1);
+      }
+      //renderScanLine(ey1, xFrom, PolyBaseSize - first, xFrom, fy2);
+      delta = fy2-PolyBaseSize+first;
+      mCurCell.addCover(delta, twoFx*delta);
+      return;
+    }
+
+    // ok, we have to render several scanlines
+    p = (PolyBaseSize-fy1)*dx;
+    first = PolyBaseSize;
+
+    if (dy < 0) {
+      p = fy1*dx;
+      first = 0;
+      incr = -1;
+      dy = -dy;
+    }
+
+    delta = p/dy;
+    mod = p%dy;
+
+    if (mod < 0) {
+      --delta;
+      mod += dy;
+    }
+
+    xFrom = x1+delta;
+    renderScanLine(ey1, x1, fy1, xFrom, first);
+
+    ey1 += incr;
+    setCurCell(xFrom>>PolyBaseShift, ey1);
+
+    if (ey1 != ey2) {
+      p = PolyBaseSize*dx;
+      lift = p/dy;
+      rem = p%dy;
+
+      if (rem < 0) {
+        --lift;
+        rem += dy;
+      }
+      mod -= dy;
+
+      while (ey1 != ey2) {
+        delta = lift;
+        mod += rem;
+        if (mod >= 0) {
+          mod -= dy;
+          ++delta;
+        }
+
+        xTo = xFrom+delta;
+        renderScanLine(ey1, xFrom, PolyBaseSize-first, xTo, first);
+        xFrom = xTo;
+
+        ey1 += incr;
+        setCurCell(xFrom>>PolyBaseShift, ey1);
+      }
+    }
+
+    renderScanLine(ey1, xFrom, PolyBaseSize-first, x2, fy2);
+  }
+
+  static void qsortCells (Cell** start, uint num) {
+    static void swapCells (Cell** a, Cell** b) nothrow @trusted @nogc {
+      pragma(inline, true);
+      auto temp = *a;
+      *a = *b;
+      *b = temp;
+    }
+
+    static bool lessThan (Cell** a, Cell** b) nothrow @trusted @nogc { pragma(inline, true); return ((**a).packedCoord < (**b).packedCoord); }
+
+    Cell**[80] stack = void;
+    Cell*** top;
+    Cell** limit;
+    Cell** base;
+
+    limit = start+num;
+    base = start;
+    top = stack.ptr;
+
+    for (;;) {
+      int len = cast(int)(limit-base);
+
+      Cell** i;
+      Cell** j;
+      Cell** pivot;
+
+      if (len > QSortThreshold) {
+        // we use base + len/2 as the pivot
+        pivot = base+len/2;
+        swapCells(base, pivot);
+
+        i = base+1;
+        j = limit-1;
+
+        // now ensure that *i <= *base <= *j
+        if (lessThan(j, i)) swapCells(i, j);
+        if (lessThan(base, i)) swapCells(base, i);
+        if (lessThan(j, base)) swapCells(base, j);
+
+        for (;;) {
+          do { ++i; } while (lessThan(i, base));
+          do { --j; } while (lessThan(base, j));
+          if (i > j) break;
+          swapCells(i, j);
+        }
+
+        swapCells(base, j);
+
+        // now, push the largest sub-array
+        if (j-base > limit-i) {
+          top[0] = base;
+          top[1] = j;
+          base = i;
+        } else {
+          top[0] = i;
+          top[1] = limit;
+          limit = j;
+        }
+        top += 2;
+      } else {
+        // the sub-array is small, perform insertion sort
+        j = base;
+        i = j+1;
+        for (; i < limit; j = i, ++i) {
+          for (; lessThan(j+1, j); --j) {
+            swapCells(j+1, j);
+            if (j == base) break;
+          }
+        }
+        if (top > stack.ptr) {
+          top -= 2;
+          base = top[0];
+          limit = top[1];
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  void sortCells () {
+    if (mNumCells == 0) return;
+
+    if (mNumCells > mSortedSize) {
+      import core.stdc.stdlib: realloc;
+      mSortedSize = mNumCells;
+      mSortedCells = cast(Cell**)realloc(mSortedCells, (mNumCells+1)*(Cell*).sizeof);
+    }
+
+    Cell** sortedPtr = mSortedCells;
+    Cell** blockPtr = mCells;
+    Cell* cellPtr;
+
+    uint nb = mNumCells>>CellBlockShift;
+    uint i;
+
+    while (nb--) {
+      cellPtr = *blockPtr++;
+      i = CellBlockSize;
+      while (i--) *sortedPtr++ = cellPtr++;
+    }
+
+    cellPtr = *blockPtr++;
+    i = mNumCells&CellBlockMask;
+    while (i--) *sortedPtr++ = cellPtr++;
+    mSortedCells[mNumCells] = null;
+    qsortCells(mSortedCells, mNumCells);
+  }
+}
+
+
+/* *****************************************************************************
+  Polygon rasterizer that is used to render filled polygons with
+  high-quality Anti-Aliasing. Internally, by default, the class uses
+  integer coordinates in format 24.8, i.e. 24 bits for integer part
+  and 8 bits for fractional - see PolyBaseShift. This class can be
+  used in the following  way:
+
+  1. fillRule = FillRule.EvenOdd; // optional
+
+  2. gamma() - optional.
+
+  3. reset()
+
+  4. moveTo(x, y) / lineTo(x, y) - make the polygon. One can create
+     more than one contour, but each contour must consist of at least 3
+     vertices, i.e. moveTo(x1, y1); lineTo(x2, y2); lineTo(x3, y3);
+     is the absolute minimum of vertices that define a triangle.
+     The algorithm does not check either the number of vertices nor
+     coincidence of their coordinates, but in the worst case it just
+     won't draw anything.
+     The orger of the vertices (clockwise or counterclockwise)
+     is important when using the non-zero filling rule (FillNonZero).
+     In this case the vertex order of all the contours must be the same
+     if you want your intersecting polygons to be without "holes".
+     You actually can use different vertices order. If the contours do not
+     intersect each other the order is not important anyway. If they do,
+     contours with the same vertex order will be rendered without "holes"
+     while the intersecting contours with different orders will have "holes".
+
+  fillRule() and gamma() can be called anytime before "sweeping".
+***************************************************************************** */
+public struct Rasterizer {
+public:
+  enum : uint {
+    AAShift = ScanLine.AAShift,
+    AANum = 1<<AAShift,
+    AAMask = AANum-1,
+    AA2Num = AANum*2,
+    AA2Mask = AA2Num-1,
+  }
+
+  enum FillRule {
+    NonZero,
+    EvenOdd,
+  }
+
+private:
+  Outline mOutline;
+  ScanLine mScanline;
+  FillRule mFillingRule = FillRule.NonZero;
+  ubyte[256] mGamma = DefaultGamma[];
+
+public nothrow @trusted @nogc:
+  void reset () { mOutline.reset(); }
+
+  @property FillRule fillRule () const pure { pragma(inline, true); return mFillingRule; }
+  @property void fillRule (FillRule v) { pragma(inline, true); mFillingRule = v; }
+
+  void gamma (in double g) {
+    foreach (immutable uint i; 0..256) {
+      import std.math : pow;
+      mGamma.ptr[i] = cast(ubyte)(pow(cast(double)i/255.0, g)*255.0);
+    }
+  }
+
+  void gamma (const(ubyte)[] g) {
+    if (g.length != 256) assert(0, "invalid gamma array");
+    mGamma[] = g[0..256];
+  }
+
+  void moveTo (int x, int y) { mOutline.moveTo(x, y); }
+  void lineTo (int x, int y) { mOutline.lineTo(x, y); }
+
+  void moveTo (in double x, in double y) { mOutline.moveTo(polyCoord(x), polyCoord(y)); }
+  void lineTo (in double x, in double y) { mOutline.lineTo(polyCoord(x), polyCoord(y)); }
+
+  @property double curX () const pure { pragma(inline, true); return mOutline.curX; }
+  @property double curY () const pure { pragma(inline, true); return mOutline.curY; }
+
+  @property int minX () const pure { pragma(inline, true); return mOutline.minX; }
+  @property int minY () const pure { pragma(inline, true); return mOutline.minY; }
+  @property int maxX () const pure { pragma(inline, true); return mOutline.maxX; }
+  @property int maxY () const pure { pragma(inline, true); return mOutline.maxY; }
+
+  uint calculateAlpha (int area) const pure {
+    int cover = area>>(PolyBaseShift*2+1-AAShift);
+    if (cover < 0) cover = -cover;
+    if (mFillingRule == FillRule.EvenOdd) {
+      cover &= AA2Mask;
+      if (cover > AANum) cover = AA2Num-cover;
+    }
+    if (cover > AAMask) cover = AAMask;
+    return cover;
+  }
+
+  void render(RT) (ref RT r, in Color c, int dx=0, int dy=0) if (is(RT : Renderer!ST, ST)) {
+    const(Cell)** cells = mOutline.cells();
+    if (mOutline.numCells() == 0) return;
+
+    int x, y;
+    int cover;
+    int alpha;
+    int area;
+
+    mScanline.reset(mOutline.minX(), mOutline.maxX(), dx, dy);
+
+    cover = 0;
+    const(Cell)* curCell = *cells++;
+    for (;;) {
+      const(Cell)* startCell = curCell;
+
+      int coord = curCell.packedCoord;
+      x = curCell.x;
+      y = curCell.y;
+
+      area = startCell.area;
+      cover += startCell.cover;
+
+      // accumulate all start cells
+      while ((curCell = *cells++) !is null) {
+        if (curCell.packedCoord != coord) break;
+        area  += curCell.area;
+        cover += curCell.cover;
+      }
+
+      if (area) {
+        alpha = calculateAlpha((cover<<(PolyBaseShift+1))-area);
+        if (alpha) {
+          if (mScanline.isReady(y)) {
+            r.render(mScanline, c);
+            mScanline.resetSpans();
+          }
+          mScanline.addCell(x, y, mGamma[alpha]);
+        }
+        ++x;
+      }
+
+      if (!curCell) break;
+
+      if (curCell.x > x) {
+        alpha = calculateAlpha(cover<<(PolyBaseShift+1));
+        if (alpha) {
+          if (mScanline.isReady(y)) {
+            r.render(mScanline, c);
+            mScanline.resetSpans();
+          }
+          mScanline.addSpan(x, y, curCell.x-x, mGamma[alpha]);
+        }
+      }
+    }
+
+    if (mScanline.numSpans) r.render(mScanline, c);
+  }
+
+  bool hitTest (int tx, int ty) {
+    const(Cell)** cells = mOutline.cells();
+    if (mOutline.numCells == 0) return false;
+
+    int x, y;
+    int cover;
+    int alpha;
+    int area;
+
+    cover = 0;
+    const(Cell)* curCell = *cells++;
+    for (;;) {
+      const(Cell)* startCell = curCell;
+
+      int coord = curCell.packedCoord;
+      x = curCell.x;
+      y = curCell.y;
+
+      if (y > ty) return false;
+
+      area = startCell.area;
+      cover += startCell.cover;
+
+      while ((curCell = *cells++) !is null) {
+        if (curCell.packedCoord != coord) break;
+        area += curCell.area;
+        cover += curCell.cover;
+      }
+
+      if (area) {
+        alpha = calculateAlpha((cover<<(PolyBaseShift+1))-area);
+        if (alpha) {
+          if (tx == x && ty == y) return true;
+        }
+        ++x;
+      }
+
+      if (!curCell) break;
+
+      if (curCell.x > x) {
+        alpha = calculateAlpha(cover<<(PolyBaseShift+1));
+        if (alpha) {
+          if (ty == y && tx >= x && tx <= curCell.x) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+private:
+  static immutable ubyte[256] DefaultGamma = [
+      0,  0,  1,  1,  2,  2,  3,  4,  4,  5,  5,  6,  7,  7,  8,  8,
+      9, 10, 10, 11, 11, 12, 13, 13, 14, 14, 15, 16, 16, 17, 18, 18,
+     19, 19, 20, 21, 21, 22, 22, 23, 24, 24, 25, 25, 26, 27, 27, 28,
+     29, 29, 30, 30, 31, 32, 32, 33, 34, 34, 35, 36, 36, 37, 37, 38,
+     39, 39, 40, 41, 41, 42, 43, 43, 44, 45, 45, 46, 47, 47, 48, 49,
+     49, 50, 51, 51, 52, 53, 53, 54, 55, 55, 56, 57, 57, 58, 59, 60,
+     60, 61, 62, 62, 63, 64, 65, 65, 66, 67, 68, 68, 69, 70, 71, 71,
+     72, 73, 74, 74, 75, 76, 77, 78, 78, 79, 80, 81, 82, 83, 83, 84,
+     85, 86, 87, 88, 89, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99,
+    100,101,101,102,103,104,105,106,107,108,109,110,111,112,114,115,
+    116,117,118,119,120,121,122,123,124,126,127,128,129,130,131,132,
+    134,135,136,137,139,140,141,142,144,145,146,147,149,150,151,153,
+    154,155,157,158,159,161,162,164,165,166,168,169,171,172,174,175,
+    177,178,180,181,183,184,186,188,189,191,192,194,195,197,199,200,
+    202,204,205,207,209,210,212,214,215,217,219,220,222,224,225,227,
+    229,230,232,234,236,237,239,241,242,244,246,248,249,251,253,255
+  ];
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// X11 image: "bgra"; TrueColorImage: "rgba"
+public struct SimpleSpan(string mode)
+if (mode == "bgra" || mode == "rgba" || mode == "x11" || mode == "X11" || mode == "arsd" || mode == "bgr" || mode == "rgb")
+{
+  static if (mode == "bgra" || mode == "x11" || mode == "X11") {
+    enum IsBGRA = true;
+    enum Is32Bit = true;
+  } else static if (mode == "rgba" || mode == "arsd") {
+    enum IsBGRA = false;
+    enum Is32Bit = true;
+  } else static if (mode == "bgr") {
+    enum IsBGRA = true;
+    enum Is32Bit = false;
+  } else static if (mode == "rgb") {
+    enum IsBGRA = false;
+    enum Is32Bit = false;
+  } else {
+    static assert(0, "invalid mode");
+  }
+
+  static void render (ubyte* ptr, int x, uint count, const(ubyte)* covers, in Color c) {
+    static if (Is32Bit) {
+      ubyte* p = ptr+(x<<2);
+    } else {
+      ubyte* p = ptr+x+x+x;
+    }
+    do {
+      int alpha = (*covers++)*c.a;
+      static if (IsBGRA) {
+        int b = p[0];
+        int g = p[1];
+        int r = p[2];
+        static if (Is32Bit) int a = p[3];
+        *p++ = cast(ubyte)((((c.b-b)*alpha)+(b<<16))>>16);
+        *p++ = cast(ubyte)((((c.g-g)*alpha)+(g<<16))>>16);
+        *p++ = cast(ubyte)((((c.r-r)*alpha)+(r<<16))>>16);
+        static if (Is32Bit) *p++ = cast(ubyte)((((c.a-a)*alpha)+(a<<16))>>16);
+      } else {
+        int r = p[0];
+        int g = p[1];
+        int b = p[2];
+        static if (Is32Bit) int a = p[3];
+        *p++ = cast(ubyte)((((c.r-r)*alpha)+(r<<16))>>16);
+        *p++ = cast(ubyte)((((c.g-g)*alpha)+(g<<16))>>16);
+        *p++ = cast(ubyte)((((c.b-b)*alpha)+(b<<16))>>16);
+        static if (Is32Bit) *p++ = cast(ubyte)((((c.a-a)*alpha)+(a<<16))>>16);
+      }
+    } while (--count);
+  }
+
+  static void hline (ubyte* ptr, int x, uint count, in Color c) {
+    static if (!IsBGRA && Is32Bit) {
+      // fastest case
+      uint* p = cast(uint*)(ptr+(x<<2));
+      p[0..count] = c.asUint;
+    } else {
+      static if (Is32Bit) {
+        ubyte* p = ptr+(x<<2);
+      } else {
+        ubyte* p = ptr+x+x+x;
+      }
+      do {
+        static if (IsBGRA) {
+          *p++ = c.b;
+          *p++ = c.g;
+          *p++ = c.r;
+        } else {
+          *p++ = c.r;
+          *p++ = c.g;
+          *p++ = c.b;
+        }
+        static if (Is32Bit) *p++ = c.a;
+      } while (--count);
+    }
+  }
+
+  static Color get (const(ubyte)* ptr, int x) {
+    static if (Is32Bit) {
+      const(ubyte)* p = ptr+(x<<2);
+    } else {
+      const(ubyte)* p = ptr+x+x+x;
+    }
+    static if (IsBGRA) {
+      static if (Is32Bit) {
+        return Color(p[2], p[1], p[0], p[3]);
+      } else {
+        return Color(p[2], p[1], p[0], 255);
+      }
+    } else {
+      static if (Is32Bit) {
+        return Color(p[0], p[1], p[2], p[3]);
+      } else {
+        return Color(p[0], p[1], p[2]);
+      }
+    }
+  }
+}
++/
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /+
 version(linux) final class SdpyDrawVBuf : SdpyDrawBase {
 private:
