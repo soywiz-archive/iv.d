@@ -1627,7 +1627,7 @@ private int stbtt__GetGlyphShapeTT(stbtt_fontinfo* info, int glyph_index, stbtt_
       n = 1+ttUSHORT(endPtsOfContours + numberOfContours*2-2);
 
       m = n + 2*numberOfContours;  // a loose bound on how many vertices we might need
-      vertices = cast(stbtt_vertex *) STBTT_malloc(m * vertices[0].sizeof, info.userdata);
+      vertices = cast(stbtt_vertex *) STBTT_malloc(m * cast(uint)vertices[0].sizeof, info.userdata);
       if (vertices is null)
          return 0;
 
@@ -1800,14 +1800,14 @@ private int stbtt__GetGlyphShapeTT(stbtt_fontinfo* info, int glyph_index, stbtt_
                v.cy = cast(stbtt_vertex_type)(n * (mtx[1]*x + mtx[3]*y + mtx[5]));
             }
             // Append vertices.
-            tmp = cast(stbtt_vertex*)STBTT_malloc((num_vertices+comp_num_verts)*stbtt_vertex.sizeof, info.userdata);
+            tmp = cast(stbtt_vertex*)STBTT_malloc((num_vertices+comp_num_verts)*cast(uint)stbtt_vertex.sizeof, info.userdata);
             if (!tmp) {
                if (vertices) STBTT_free(vertices, info.userdata);
                if (comp_verts) STBTT_free(comp_verts, info.userdata);
                return 0;
             }
-            if (num_vertices > 0) STBTT_memcpy(tmp, vertices, num_vertices*stbtt_vertex.sizeof);
-            STBTT_memcpy(tmp+num_vertices, comp_verts, comp_num_verts*stbtt_vertex.sizeof);
+            if (num_vertices > 0) STBTT_memcpy(tmp, vertices, num_vertices*cast(uint)stbtt_vertex.sizeof);
+            STBTT_memcpy(tmp+num_vertices, comp_verts, comp_num_verts*cast(uint)stbtt_vertex.sizeof);
             if (vertices) STBTT_free(vertices, info.userdata);
             vertices = tmp;
             STBTT_free(comp_verts, info.userdata);
@@ -2204,7 +2204,7 @@ private int stbtt__GetGlyphShapeT2(stbtt_fontinfo* info, int glyph_index, stbtt_
    stbtt__csctx count_ctx = stbtt__csctx(1,0, 0,0, 0,0, 0,0,0,0, null, 0); //STBTT__CSCTX_INIT(1);
    stbtt__csctx output_ctx = stbtt__csctx(0,0, 0,0, 0,0, 0,0,0,0, null, 0); //STBTT__CSCTX_INIT(0);
    if (stbtt__run_charstring(info, glyph_index, &count_ctx)) {
-      *pvertices = cast(stbtt_vertex*)STBTT_malloc(count_ctx.num_vertices*stbtt_vertex.sizeof, info.userdata);
+      *pvertices = cast(stbtt_vertex*)STBTT_malloc(count_ctx.num_vertices*cast(uint)stbtt_vertex.sizeof, info.userdata);
       output_ctx.pvertices = *pvertices;
       if (stbtt__run_charstring(info, glyph_index, &output_ctx)) {
          assert(output_ctx.num_vertices == count_ctx.num_vertices);
@@ -2643,7 +2643,7 @@ private void *stbtt__hheap_alloc(stbtt__hheap *hh, size_t size, void *userdata)
    } else {
       if (hh.num_remaining_in_head_chunk == 0) {
          int count = (size < 32 ? 2000 : size < 128 ? 800 : 100);
-         stbtt__hheap_chunk *c = cast(stbtt__hheap_chunk *) STBTT_malloc(stbtt__hheap_chunk.sizeof + size * count, userdata);
+         stbtt__hheap_chunk *c = cast(stbtt__hheap_chunk *) STBTT_malloc(cast(uint)(stbtt__hheap_chunk.sizeof + size * count), userdata);
          if (c == null)
             return null;
          c.next = hh.head;
@@ -2651,7 +2651,7 @@ private void *stbtt__hheap_alloc(stbtt__hheap *hh, size_t size, void *userdata)
          hh.num_remaining_in_head_chunk = count;
       }
       --hh.num_remaining_in_head_chunk;
-      return cast(char *) (hh.head) + stbtt__hheap_chunk.sizeof + size * hh.num_remaining_in_head_chunk;
+      return cast(char *) (hh.head) + cast(uint)stbtt__hheap_chunk.sizeof + size * hh.num_remaining_in_head_chunk;
    }
 }
 
@@ -2700,7 +2700,8 @@ enum STBTT_FIXMASK    = (STBTT_FIX-1);
 
 private stbtt__active_edge *stbtt__new_active(stbtt__hheap *hh, stbtt__edge *e, int off_x, float start_point, void *userdata)
 {
-   stbtt__active_edge *z = cast(stbtt__active_edge *) stbtt__hheap_alloc(hh, (*z).sizeof, userdata);
+   stbtt__active_edge *z = void;
+   z = cast(stbtt__active_edge *) stbtt__hheap_alloc(hh, cast(uint)(*z).sizeof, userdata);
    float dxdy = (e.x1 - e.x0) / (e.y1 - e.y0);
    assert(z != null);
    if (!z) return z;
@@ -2723,7 +2724,7 @@ private stbtt__active_edge *stbtt__new_active(stbtt__hheap *hh, stbtt__edge *e, 
 private stbtt__active_edge *stbtt__new_active(stbtt__hheap *hh, stbtt__edge *e, int off_x, float start_point, void *userdata)
 {
    stbtt__active_edge *z = void;
-   z = cast(stbtt__active_edge *) stbtt__hheap_alloc(hh, (*z).sizeof, userdata);
+   z = cast(stbtt__active_edge *) stbtt__hheap_alloc(hh, cast(uint)(*z).sizeof, userdata);
    float dxdy = (e.x1 - e.x0) / (e.y1 - e.y0);
    assert(z != null);
    //STBTT_assert(e->y0 <= start_point);
@@ -3103,7 +3104,7 @@ private void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e
    //STBTT__NOTUSED(vsubsample);
 
    if (result.w > 64)
-      scanline = cast(float *) STBTT_malloc((result.w*2+1) * float.sizeof, userdata);
+      scanline = cast(float *) STBTT_malloc((result.w*2+1) * cast(uint)float.sizeof, userdata);
    else
       scanline = scanline_data.ptr;
 
@@ -3118,8 +3119,8 @@ private void stbtt__rasterize_sorted_edges(stbtt__bitmap *result, stbtt__edge *e
       float scan_y_bottom = y + 1.0f;
       stbtt__active_edge **step = &active;
 
-      STBTT_memset(scanline , 0, result.w*scanline[0].sizeof);
-      STBTT_memset(scanline2, 0, (result.w+1)*scanline[0].sizeof);
+      STBTT_memset(scanline , 0, result.w*cast(uint)scanline[0].sizeof);
+      STBTT_memset(scanline2, 0, (result.w+1)*cast(uint)scanline[0].sizeof);
 
       // update all active edges;
       // remove all active edges that terminate before the top of this scanline
@@ -3300,7 +3301,7 @@ static if (STBTT_RASTERIZER_VERSION == 1) {
    for (i=0; i < windings; ++i)
       n += wcount[i];
 
-   e = cast(stbtt__edge *) STBTT_malloc((*e).sizeof * (n+1), userdata); // add an extra one as a sentinel
+   e = cast(stbtt__edge *) STBTT_malloc(cast(uint)(*e).sizeof * (n+1), userdata); // add an extra one as a sentinel
    if (e is null) return;
    n = 0;
 
@@ -3425,7 +3426,7 @@ private stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts,
    *num_contours = n;
    if (n == 0) return null;
 
-   *contour_lengths = cast(int *) STBTT_malloc((**contour_lengths).sizeof * n, userdata);
+   *contour_lengths = cast(int *) STBTT_malloc(cast(uint)(**contour_lengths).sizeof * n, userdata);
 
    if (*contour_lengths is null) {
       *num_contours = 0;
@@ -3436,7 +3437,7 @@ private stbtt__point *stbtt_FlattenCurves(stbtt_vertex *vertices, int num_verts,
    for (pass=0; pass < 2; ++pass) {
       float x=0,y=0;
       if (pass == 1) {
-         points = cast(stbtt__point *) STBTT_malloc(num_points * points[0].sizeof, userdata);
+         points = cast(stbtt__point *) STBTT_malloc(num_points * cast(uint)points[0].sizeof, userdata);
          if (points == null) goto error;
       }
       num_points = 0;
@@ -3750,10 +3751,10 @@ private void stbrp_pack_rects(stbrp_context *con, stbrp_rect *rects, int num_rec
 public int stbtt_PackBegin(stbtt_pack_context *spc, ubyte *pixels, int pw, int ph, int stride_in_bytes, int padding, void *alloc_context)
 {
    stbrp_context *context = void;
-   context = cast(stbrp_context *) STBTT_malloc((*context).sizeof            ,alloc_context);
+   context = cast(stbrp_context *) STBTT_malloc(cast(uint)(*context).sizeof            ,alloc_context);
    int            num_nodes = pw - padding;
    stbrp_node    *nodes   = void;
-   nodes = cast(stbrp_node    *) STBTT_malloc((*nodes  ).sizeof * num_nodes,alloc_context);
+   nodes = cast(stbrp_node    *) STBTT_malloc(cast(uint)(*nodes  ).sizeof * num_nodes,alloc_context);
 
    if (context == null || nodes == null) {
       if (context != null) STBTT_free(context, alloc_context);
@@ -4093,7 +4094,7 @@ public int stbtt_PackFontRanges(stbtt_pack_context *spc, const(ubyte)* fontdata,
    for (i=0; i < num_ranges; ++i)
       n += ranges[i].num_chars;
 
-   rects = cast(stbrp_rect *) STBTT_malloc((*rects).sizeof * n, spc.user_allocator_context);
+   rects = cast(stbrp_rect *) STBTT_malloc(cast(uint)(*rects).sizeof * n, spc.user_allocator_context);
    if (rects == null)
       return 0;
 
@@ -4380,7 +4381,7 @@ public ubyte * stbtt_GetGlyphSDF(stbtt_fontinfo* info, float scale, int glyph, i
       stbtt_vertex *verts;
       int num_verts = stbtt_GetGlyphShape(info, glyph, &verts);
       data = cast(ubyte *) STBTT_malloc(w * h, info.userdata);
-      precompute = cast(float *) STBTT_malloc(num_verts * float.sizeof, info.userdata);
+      precompute = cast(float *) STBTT_malloc(num_verts * cast(uint)float.sizeof, info.userdata);
 
       for (i=0,j=num_verts-1; i < num_verts; j=i++) {
          if (verts[i].type == STBTT_vline) {
