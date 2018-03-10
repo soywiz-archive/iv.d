@@ -1551,7 +1551,7 @@ private int stbtt__GetGlyfOffset(const(stbtt_fontinfo)* info, int glyph_index)
 
 //private int stbtt__GetGlyphInfoT2(const(stbtt_fontinfo)* info, int glyph_index, int *x0, int *y0, int *x1, int *y1);
 
-private int stbtt_GetGlyphBox(stbtt_fontinfo* info, int glyph_index, int *x0, int *y0, int *x1, int *y1)
+public int stbtt_GetGlyphBox(stbtt_fontinfo* info, int glyph_index, int *x0, int *y0, int *x1, int *y1)
 {
    if (info.cff.size) {
       stbtt__GetGlyphInfoT2(info, glyph_index, x0, y0, x1, y1);
