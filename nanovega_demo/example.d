@@ -29,7 +29,10 @@ import iv.nanovega.blendish;
 import iv.nanovega.perf;
 
 version(aliced) {
-  version = nanovg_demo_msfonts;
+  version(nanovg_demo_shitfonts) {
+  } else {
+    version = nanovg_demo_msfonts;
+  }
 }
 
 
