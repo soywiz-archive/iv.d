@@ -429,7 +429,7 @@ import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 
-version = nanovg_force_stb_ttf;
+//version = nanovg_force_stb_ttf;
 
 version(Posix) {
   version = nanovg_use_freetype;
@@ -7509,9 +7509,9 @@ private:
   }
 
 public:
-  float[4] bounds = 0;
+  float[4] bounds = 0; /// glyph outline bounds
 
-  @property int length () const pure { pragma(inline, true); return ccount; }
+  @property int length () const pure { pragma(inline, true); return ccount; } /// number of commands in outline
 
 public:
   /// Returns forward range with all glyph commands.
@@ -8432,11 +8432,11 @@ version(nanovg_use_freetype_ii) {
     } else static if (__traits(compiles, { import arsd.ttf; })) {
       import arsd.ttf;
       enum NanoVegaIsUsingSTBTTF = true;
-      //pragma(msg, "arsd.ttf");
+      version(nanovg_report_stb_ttf) pragma(msg, "arsd.ttf");
     } else static if (__traits(compiles, { import stb_truetype; })) {
       import stb_truetype;
       enum NanoVegaIsUsingSTBTTF = true;
-      //pragma(msg, "stb_truetype");
+      version(nanovg_report_stb_ttf) pragma(msg, "stb_truetype");
     } else static if (__traits(compiles, { import iv.freetype; })) {
       version (nanovg_builtin_freetype_bindings) {
         enum NanoVegaIsUsingSTBTTF = false;
@@ -8445,7 +8445,7 @@ version(nanovg_use_freetype_ii) {
         import iv.freetype;
         enum NanoVegaIsUsingSTBTTF = false;
       }
-      //pragma(msg, "iv.freetype");
+      version(nanovg_report_stb_ttf) pragma(msg, "freetype");
     } else {
       static assert(0, "no stb_ttf/iv.freetype found!");
     }
@@ -8966,8 +8966,8 @@ extern(C) nothrow @trusted @nogc {
     NVGGlyphOutline* ol;
     FT_BBox outlineBBox;
   nothrow @trusted @nogc:
-    T transx(T) (T v) const pure { pragma(inline, true); return v; }
-    T transy(T) (T v) const pure { pragma(inline, true); return -v; }
+    static float transx(T) (T v) pure { pragma(inline, true); return cast(float)v; }
+    static float transy(T) (T v) pure { pragma(inline, true); return -cast(float)v; }
     void putBytes (const(void)[] b) {
       assert(b.length <= 512);
       if (b.length == 0) return;
@@ -9183,15 +9183,174 @@ float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1
   // FUnits -> pixels: pointSize * resolution / (72 points per inch * units_per_em)
   // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM02/Chap2.html#converting
   float res = void;
-  forceNoThrowNoGC({ res = stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2); });
+  forceNoThrowNoGC({
+    res = stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2);
+    res *= stbtt_ScaleForPixelHeight(&font.font, size);
+  });
   /*
   if (res != 0) {
     { import core.stdc.stdio; printf("fres=%g; size=%g; %g (%g); rv=%g\n", res, size, res*stbtt_ScaleForMappingEmToPixels(&font.font, size), stbtt_ScaleForPixelHeight(&font.font, size*100), res*stbtt_ScaleForPixelHeight(&font.font, size*100)); }
   }
   */
   //k8: dunno if this is right; i guess it isn't but...
-  return res*stbtt_ScaleForPixelHeight(&font.font, size);
+  return res;
 }
+
+// old arsd.ttf sux! ;-)
+static if (is(typeof(STBTT_vcubic))) {
+
+static struct OutlinerData {
+  @disable this (this);
+  NVGGlyphOutline* ol;
+nothrow @trusted @nogc:
+  static float transx(T) (T v) pure { pragma(inline, true); return cast(float)v; }
+  static float transy(T) (T v) pure { pragma(inline, true); return -cast(float)v; }
+  void putBytes (const(void)[] b) {
+    assert(b.length <= 512);
+    if (b.length == 0) return;
+    if (ol.used+cast(uint)b.length > ol.size) {
+      import core.stdc.stdlib : realloc;
+      uint newsz = (ol.size == 0 ? 2048 : ol.size < 32768 ? ol.size*2 : ol.size+8192);
+      assert(ol.used+cast(uint)b.length <= newsz);
+      auto nd = cast(ubyte*)realloc(ol.data, newsz);
+      if (nd is null) assert(0, "FONS: out of memory");
+      ol.size = newsz;
+      ol.data = nd;
+    }
+    import core.stdc.string : memcpy;
+    memcpy(ol.data+ol.used, b.ptr, b.length);
+    ol.used += cast(uint)b.length;
+  }
+  void newCommand (ubyte cmd) { pragma(inline, true); ++ol.ccount; putBytes((&cmd)[0..1]); }
+  void putArg (float f) { putBytes((&f)[0..1]); }
+}
+
+
+bool fons__nvg__toPath (NVGContext vg, FONSttFontImpl* font, uint glyphidx, float[] bounds=null) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+
+  bool okflag = false;
+
+  forceNoThrowNoGC({
+    int x0, y0, x1, y1;
+    if (!stbtt_GetGlyphBox(&font.font, glyphidx, &x0, &y0, &x1, &y1)) {
+      bounds[] = 0;
+      return;
+    }
+
+    if (bounds.length > 0) bounds.ptr[0] = x0;
+    if (bounds.length > 1) bounds.ptr[1] = -y1;
+    if (bounds.length > 2) bounds.ptr[2] = x1;
+    if (bounds.length > 3) bounds.ptr[3] = -y0;
+
+    static float transy(T) (T v) pure { pragma(inline, true); return -cast(float)v; }
+
+    stbtt_vertex* verts = null;
+    scope(exit) { import core.stdc.stdlib : free; if (verts !is null) free(verts); }
+    int vcount = stbtt_GetGlyphShape(&font.font, glyphidx, &verts);
+    if (vcount < 1) return;
+
+    foreach (const ref vt; verts[0..vcount]) {
+      switch (vt.type) {
+        case STBTT_vmove: vg.moveTo(vt.x, transy(vt.y)); break;
+        case STBTT_vline: vg.lineTo(vt.x, transy(vt.y)); break;
+        case STBTT_vcurve: vg.quadTo(vt.x, transy(vt.y), vt.cx, transy(vt.cy)); break;
+        case STBTT_vcubic: vg.bezierTo(vt.x, transy(vt.y), vt.cx, transy(vt.cy), vt.cx1, transy(vt.cy1)); break;
+        default:
+      }
+    }
+
+    okflag = true;
+  });
+
+  return okflag;
+}
+
+bool fons__nvg__toOutline (FONSttFontImpl* font, uint glyphidx, NVGGlyphOutline* ol) nothrow @trusted @nogc {
+  bool okflag = false;
+
+  forceNoThrowNoGC({
+    int x0, y0, x1, y1;
+
+    if (!stbtt_GetGlyphBox(&font.font, glyphidx, &x0, &y0, &x1, &y1)) {
+      ol.bounds[] = 0;
+      return;
+    }
+
+    ol.bounds.ptr[0] = x0;
+    ol.bounds.ptr[1] = -y1;
+    ol.bounds.ptr[2] = x1;
+    ol.bounds.ptr[3] = -y0;
+
+    stbtt_vertex* verts = null;
+    scope(exit) { import core.stdc.stdlib : free; if (verts !is null) free(verts); }
+    int vcount = stbtt_GetGlyphShape(&font.font, glyphidx, &verts);
+    if (vcount < 1) return;
+
+    OutlinerData odata;
+    odata.ol = ol;
+
+    foreach (const ref vt; verts[0..vcount]) {
+      switch (vt.type) {
+        case STBTT_vmove:
+          odata.newCommand(odata.ol.Command.Kind.MoveTo);
+          odata.putArg(odata.transx(vt.x));
+          odata.putArg(odata.transy(vt.y));
+          break;
+        case STBTT_vline:
+          odata.newCommand(odata.ol.Command.Kind.LineTo);
+          odata.putArg(odata.transx(vt.x));
+          odata.putArg(odata.transy(vt.y));
+          break;
+        case STBTT_vcurve:
+          odata.newCommand(odata.ol.Command.Kind.QuadTo);
+          odata.putArg(odata.transx(vt.x));
+          odata.putArg(odata.transy(vt.y));
+          odata.putArg(odata.transx(vt.cx));
+          odata.putArg(odata.transy(vt.cy));
+          break;
+        case STBTT_vcubic:
+          odata.newCommand(odata.ol.Command.Kind.BezierTo);
+          odata.putArg(odata.transx(vt.x));
+          odata.putArg(odata.transy(vt.y));
+          odata.putArg(odata.transx(vt.cx));
+          odata.putArg(odata.transy(vt.cy));
+          odata.putArg(odata.transx(vt.cx1));
+          odata.putArg(odata.transy(vt.cy1));
+          break;
+        default:
+      }
+    }
+
+    okflag = true;
+  });
+
+  return okflag;
+}
+
+bool fons__nvg__bounds (FONSttFontImpl* font, uint glyphidx, float[] bounds) nothrow @trusted @nogc {
+  if (bounds.length > 4) bounds = bounds.ptr[0..4];
+
+  bool okflag = false;
+
+  forceNoThrowNoGC({
+    int x0, y0, x1, y1;
+    if (stbtt_GetGlyphBox(&font.font, glyphidx, &x0, &y0, &x1, &y1)) {
+      if (bounds.length > 0) bounds.ptr[0] = x0;
+      if (bounds.length > 1) bounds.ptr[1] = -y1;
+      if (bounds.length > 2) bounds.ptr[2] = x1;
+      if (bounds.length > 3) bounds.ptr[3] = -y0;
+      okflag = true;
+    } else {
+      bounds[] = 0;
+    }
+  });
+
+  return okflag;
+}
+
+} // check for old stb_ttf
+
 
 } // version
 
