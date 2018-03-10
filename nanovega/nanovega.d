@@ -429,6 +429,8 @@ import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memset, memcpy, strlen;
 import std.math : PI;
 
+version = nanovg_force_stb_ttf;
+
 version(Posix) {
   version = nanovg_use_freetype;
 } else {
@@ -8391,21 +8393,28 @@ import core.stdc.stdio : FILE, fopen, fclose, fseek, ftell, fread, SEEK_END, SEE
 
 public:
 // welcome to version hell!
-version(nanovg_force_detect) {} else version(nanovg_use_freetype) { version = nanovg_use_freetype_ii; }
+version(nanovg_force_stb_ttf) {
+} else {
+  version(nanovg_force_detect) {} else version(nanovg_use_freetype) { version = nanovg_use_freetype_ii; }
+}
 version(nanovg_ignore_iv_stb_ttf) enum nanovg_ignore_iv_stb_ttf = true; else enum nanovg_ignore_iv_stb_ttf = false;
 //version(nanovg_ignore_mono);
 
-version (nanovg_builtin_freetype_bindings) {
-  version(Posix) {
-    private enum NanoVegaForceFreeType = true;
-  } else {
-    private enum NanoVegaForceFreeType = false;
-  }
+version(nanovg_force_stb_ttf) {
+  private enum NanoVegaForceFreeType = false;
 } else {
-  version(Posix) {
-    private enum NanoVegaForceFreeType = true;
+  version (nanovg_builtin_freetype_bindings) {
+    version(Posix) {
+      private enum NanoVegaForceFreeType = true;
+    } else {
+      private enum NanoVegaForceFreeType = false;
+    }
   } else {
-    private enum NanoVegaForceFreeType = false;
+    version(Posix) {
+      private enum NanoVegaForceFreeType = true;
+    } else {
+      private enum NanoVegaForceFreeType = false;
+    }
   }
 }
 
@@ -8419,7 +8428,7 @@ version(nanovg_use_freetype_ii) {
     static if (!nanovg_ignore_iv_stb_ttf && __traits(compiles, { import iv.stb.ttf; })) {
       import iv.stb.ttf;
       enum NanoVegaIsUsingSTBTTF = true;
-      //pragma(msg, "iv.stb.ttf");
+      version(nanovg_report_stb_ttf) pragma(msg, "iv.stb.ttf");
     } else static if (__traits(compiles, { import arsd.ttf; })) {
       import arsd.ttf;
       enum NanoVegaIsUsingSTBTTF = true;
@@ -9171,9 +9180,17 @@ void fons__tt_renderGlyphBitmap (FONSttFontImpl* font, ubyte* output, int outWid
 }
 
 float fons__tt_getGlyphKernAdvance (FONSttFontImpl* font, float size, int glyph1, int glyph2) nothrow @trusted @nogc {
+  // FUnits -> pixels: pointSize * resolution / (72 points per inch * units_per_em)
+  // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM02/Chap2.html#converting
   float res = void;
   forceNoThrowNoGC({ res = stbtt_GetGlyphKernAdvance(&font.font, glyph1, glyph2); });
-  return res;
+  /*
+  if (res != 0) {
+    { import core.stdc.stdio; printf("fres=%g; size=%g; %g (%g); rv=%g\n", res, size, res*stbtt_ScaleForMappingEmToPixels(&font.font, size), stbtt_ScaleForPixelHeight(&font.font, size*100), res*stbtt_ScaleForPixelHeight(&font.font, size*100)); }
+  }
+  */
+  //k8: dunno if this is right; i guess it isn't but...
+  return res*stbtt_ScaleForPixelHeight(&font.font, size);
 }
 
 } // version
