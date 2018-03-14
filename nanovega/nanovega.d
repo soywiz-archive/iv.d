@@ -459,7 +459,7 @@ version(nanovg_disable_fontconfig) {
 /++
 	Annotation to indicate it is compatible with [arsd.script]
 +/
-package(arsd) enum scriptable = "arsd_jsvar_compatible";
+package(iv) enum scriptable = "arsd_jsvar_compatible";
 
 public:
 alias NVG_PI = PI;
