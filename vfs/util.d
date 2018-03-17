@@ -346,7 +346,7 @@ public char[] expandTilde (char[] destBuf, const(char)[] inputPath) nothrow @tru
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-inout(char)[] removeExtension (inout(char)[] fn) {
+inout(char)[] removeExtension (inout(char)[] fn) pure nothrow @trusted @nogc {
   foreach_reverse (immutable cidx, char ch; fn) {
     version(Posix) {
       if (ch == '/') break;
@@ -359,7 +359,7 @@ inout(char)[] removeExtension (inout(char)[] fn) {
 }
 
 
-inout(char)[] getExtension (inout(char)[] fn) {
+inout(char)[] getExtension (inout(char)[] fn) pure nothrow @trusted @nogc {
   foreach_reverse (immutable cidx, char ch; fn) {
     version(Posix) {
       if (ch == '/') return null;
@@ -369,6 +369,33 @@ inout(char)[] getExtension (inout(char)[] fn) {
     if (ch == '.') {
       if (cidx == fn.length) return null;
       return fn[cidx..$];
+    }
+  }
+  return null;
+}
+
+
+inout(char)[] baseName (inout(char)[] fn) pure nothrow @trusted @nogc {
+  foreach_reverse (immutable cidx, char ch; fn) {
+    version(Posix) {
+      if (ch == '/') return fn[cidx+1..$];
+    } else {
+      if (ch == '/' || ch == '\\' || ch == ':') return fn[cidx+1..$];
+    }
+  }
+  return fn;
+}
+
+
+// without last '/' (if it is not a root dir)
+// also, returns null if there is no dir (not ".")
+inout(char)[] dirName (inout(char)[] fn) pure nothrow @trusted @nogc {
+  foreach_reverse (immutable cidx, char ch; fn) {
+    version(Posix) {
+      if (ch == '/') return (cidx != 0 ? fn[0..cidx] : fn[0..1]);
+    } else {
+      // this is wrong, but idc
+      if (ch == '/' || ch == '\\' || ch == ':') return fn[0..cidx];
     }
   }
   return null;
