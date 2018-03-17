@@ -346,9 +346,13 @@ bool renderConsole () nothrow @trusted @nogc {
     }
   }
 
-  foreach (/*auto*/ line; conbufLinesRev) {
-    putLine(line);
-    if (y <= 1) break;
+  {
+    consoleWriteLock();
+    scope(exit) consoleWriteUnlock();
+    foreach (/*auto*/ line; conbufLinesRev) {
+      putLine(line);
+      if (y <= 1) break;
+    }
   }
   while (y >= 1) {
     conOPut("\x1b[K\r\x1b[A");

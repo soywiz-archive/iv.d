@@ -147,7 +147,7 @@ public void consoleUnlock() () nothrow @trusted {
 }
 
 // multithread lock
-private void consoleWriteLock() () nothrow @trusted {
+public void consoleWriteLock() () nothrow @trusted {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleWriteLocker.lock();
@@ -157,7 +157,7 @@ private void consoleWriteLock() () nothrow @trusted {
 }
 
 // multithread unlock
-private void consoleWriteUnlock() () nothrow @trusted {
+public void consoleWriteUnlock() () nothrow @trusted {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleWriteLocker.unlock();
