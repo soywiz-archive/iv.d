@@ -49,8 +49,6 @@ public __gshared void delegate () glconOnHide = null;
 //
 // public bool conProcessQueue (); (from iv.cmdcon)
 //   call this in your main loop to process all accumulated console commands.
-//   WARNING! this is NOT thread-safe, you MUST call this in your "processing thread", and
-//            you MUST put `consoleLock()/consoleUnlock()` around the call!
 
 // ////////////////////////////////////////////////////////////////////////// //
 public bool isConsoleVisible () nothrow @trusted @nogc { pragma(inline, true); return rConsoleVisible; } ///
@@ -931,8 +929,12 @@ public void glconProcessEventMessage () {
   {
     consoleLock();
     scope(exit) consoleUnlock();
-    wasCommands = conQueueEmpty;
-    conProcessQueue();
+    wasCommands = conQueueEmpty();
+  }
+  conProcessQueue();
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
     sendAnother = !conQueueEmpty();
   }
   if (glconCtlWindow is null || glconCtlWindow.closed) return;

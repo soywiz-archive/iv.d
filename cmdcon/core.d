@@ -59,7 +59,11 @@ shared static this () {
 // ////////////////////////////////////////////////////////////////////////// //
 import core.sync.mutex : Mutex;
 __gshared Mutex consoleLocker;
-shared static this () { consoleLocker = new Mutex(); }
+__gshared Mutex consoleWriteLocker;
+shared static this () {
+  consoleLocker = new Mutex();
+  consoleWriteLocker = new Mutex();
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -142,6 +146,26 @@ public void consoleUnlock() () nothrow @trusted {
   }
 }
 
+// multithread lock
+private void consoleWriteLock() () nothrow @trusted {
+  version(aliced) pragma(inline, true);
+  version(aliced) {
+    consoleWriteLocker.lock();
+  } else {
+    try { consoleWriteLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+  }
+}
+
+// multithread unlock
+private void consoleWriteUnlock() () nothrow @trusted {
+  version(aliced) pragma(inline, true);
+  version(aliced) {
+    consoleWriteLocker.unlock();
+  } else {
+    try { consoleWriteLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+  }
+}
+
 public __gshared void delegate () nothrow @trusted @nogc conWasNewLineCB; /// can be called in any thread; called if some '\n' was output with `conwrite*()`
 
 
@@ -152,8 +176,8 @@ public void cbufPut() (scope ConString chrs...) nothrow @trusted /*@nogc*/ { pra
 public void cbufPutIntr(bool dolock) (scope ConString chrs...) nothrow @trusted /*@nogc*/ {
   if (chrs.length) {
     import core.atomic : atomicLoad, atomicOp;
-    static if (dolock) consoleLock();
-    static if (dolock) scope(exit) consoleUnlock();
+    static if (dolock) consoleWriteLock();
+    static if (dolock) scope(exit) consoleWriteUnlock();
     final switch (/*atomicLoad(conStdoutFlag)*/cast(ConDump)conStdoutFlag) {
       case ConDump.none: break;
       case ConDump.stdout:
@@ -754,8 +778,8 @@ public void conprintfX(bool donl, A...) (ConString fmt, in auto ref A args) {
   }
 
   if (fmt.length == 0) return;
-  consoleLock();
-  scope(exit) consoleUnlock();
+  consoleWriteLock();
+  scope(exit) consoleWriteUnlock();
   auto fmtanchor = fmt;
   IntNum wdt, maxlen;
   char mode = ' ';
@@ -1334,8 +1358,8 @@ public template conwritef(string fmt, A...) {
     //enum code = gen();
     //pragma(msg, code);
     //pragma(msg, "===========");
-    consoleLock();
-    scope(exit) consoleUnlock();
+    consoleWriteLock();
+    scope(exit) consoleWriteUnlock();
     mixin(gen());
   }
 }
@@ -3360,6 +3384,8 @@ public bool conExecute (ConString s) {
           // execute command
           while (s.length && s.ptr[0] <= 32) s = s[1..$];
           //conwriteln("'", s, "'");
+          consoleUnlock();
+          scope(exit) consoleLock();
           cmd.exec(s);
         } else if (auto ali = cast(ConAlias)(*cobj)) {
           // execute alias
@@ -4789,14 +4815,12 @@ public bool conQueueEmpty () {
 }
 
 
-/** execute commands added with `concmd()`. (not thread-safe)
+/** execute commands added with `concmd()`. (thread-safe)
  *
  * all commands added during execution of this function will be postponed for the next call.
  * call this function in your main loop to process all accumulated console commands.
  *
  * WARNING:
- * this is NOT thread-safe! you MUST call this in your "processing thread", and you MUST
- * put `consoleLock()/consoleUnlock()` around the call!
  *
  * Params:
  *   maxlen = maximum queue size to process (0: don't process commands added while processing ;-)
@@ -4805,30 +4829,63 @@ public bool conQueueEmpty () {
  *   "has more commands" flag (i.e. some new commands were added to queue)
  */
 public bool conProcessQueue (uint maxlen=0) {
-  scope(exit) { clearPrependStr(); conHistShrinkBuf(); } // do it here
-  if (concmdbufpos == 0) return false;
+  import core.stdc.stdlib : realloc;
+  static char* tmpcmdbuf = null;
+  static uint tmpcmdbufsize = 0;
+  scope(exit) { consoleLock(); clearPrependStr(); conHistShrinkBuf(); consoleUnlock(); } // do it here
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
+    if (concmdbufpos == 0) return false;
+  }
   bool once = (maxlen == 0);
+  if (once) maxlen = uint.max;
   for (;;) {
-    auto ebuf = concmdbufpos;
-    ConString s = concmdbuf[0..ebuf];
-    version(iv_cmdcon_debug_wait) conwriteln("** [", s, "]; ebuf=", ebuf);
+    ConString s;
+    {
+      consoleLock();
+      scope(exit) consoleUnlock();
+      auto ebuf = concmdbufpos;
+      s = concmdbuf[0..ebuf];
+      version(iv_cmdcon_debug_wait) conwriteln("** [", s, "]; ebuf=", ebuf);
+      if (tmpcmdbufsize < s.length) {
+        tmpcmdbuf = cast(char*)realloc(tmpcmdbuf, s.length+1);
+        if (tmpcmdbuf is null) {
+          // here, we are dead and fucked (the exact order doesn't matter)
+          import core.stdc.stdlib : abort;
+          import core.stdc.stdio : fprintf, stderr;
+          import core.memory : GC;
+          import core.thread;
+          GC.disable(); // yeah
+          thread_suspendAll(); // stop right here, you criminal scum!
+          fprintf(stderr, "\n=== FATAL: OUT OF MEMORY IN COMMAND CONSOLE!\n");
+          abort(); // die, you bitch!
+        }
+        tmpcmdbufsize = cast(uint)s.length+1;
+      }
+      import core.stdc.string : memcpy;
+      if (s.length) { memcpy(tmpcmdbuf, s.ptr, s.length); s = tmpcmdbuf[0..s.length]; }
+      if (!once) {
+        if (maxlen <= ebuf) maxlen = 0; else maxlen -= ebuf;
+      }
+      concmdbufpos = 0;
+    }
+    // process commands
     while (s.length) {
       auto cmd = conGetCommandStr(s);
       if (cmd is null) break;
+      if (cmd.length > int.max/8) { conwriteln("command too long"); continue; }
       try {
         //consoleLock();
         //scope(exit) consoleUnlock();
         version(iv_cmdcon_debug_wait) conwriteln("** <", cmd, ">");
         if (conExecute(cmd)) {
-          // "wait" pseudocommand hit; remove executed part
-          //import core.stdc.string : memmove;
+          // "wait" pseudocommand hit; prepend what is left
           version(iv_cmdcon_debug_wait) conwriteln(" :: rest=<", s, ">");
-          version(iv_cmdcon_debug_wait) if (conWaitPrepends) conwriteln("pps: <", prependStr, ">"); // should prepend `ccWaitPrependStr` instead of the whole buffer
-          ebuf -= cast(uint)s.length;
-          version(iv_cmdcon_debug_wait) conwriteln("<WAIT> HIT! ebuf=", ebuf, "; concmdbufpos=", concmdbufpos);
-          //if (leftlen > 0) memmove(concmdbuf.ptr, concmdbuf.ptr+leftlen, ebuf-leftlen);
-          //concmdbufpos -= leftlen;
-          version(iv_cmdcon_debug_wait) conwriteln("=== BUFFER LEFT ===\n", concmdbuf[ebuf..concmdbufpos], "\n=================");
+          consoleLock();
+          scope(exit) consoleUnlock();
+          if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
+          if (s.length) { setPrependStr(s); concmdPrepend(prependStr); clearPrependStr(); }
           once = true;
           break;
         }
@@ -4837,27 +4894,14 @@ public bool conProcessQueue (uint maxlen=0) {
         conwriteln("***ERROR: ", e.msg);
       }
     }
-    auto pbc = concmdbufpos-ebuf;
-    // shift postponed commands
-    if (concmdbufpos > ebuf) {
-      import core.stdc.string : memmove;
-      //consoleLock();
-      //scope(exit) consoleUnlock();
-      memmove(concmdbuf.ptr, concmdbuf.ptr+ebuf, concmdbufpos-ebuf);
-      concmdbufpos -= ebuf;
-      //s = concmdbuf[0..concmdbufpos];
-      //ebuf = concmdbufpos;
-      //return true;
-      if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
-    } else {
-      concmdbufpos = 0;
-      if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
-      break;
-    }
-    if (once || pbc >= maxlen) break;
-    maxlen -= pbc;
+    if (once || maxlen == 0) break;
   }
-  return (concmdbufpos == 0);
+  {
+    consoleLock();
+    scope(exit) consoleUnlock();
+    if (ccWaitPrependStrLen) { concmdPrepend(prependStr); clearPrependStr(); }
+    return (concmdbufpos == 0);
+  }
 }
 
 
@@ -4877,8 +4921,8 @@ public bool conProcessQueue (uint maxlen=0) {
  *   `true` is any command was added to queue.
  */
 public bool conProcessArgs(bool immediate=false) (ref string[] args) {
-  consoleLock();
-  scope(exit) consoleUnlock();
+  //consoleLock();
+  //scope(exit) consoleUnlock();
 
   bool ensureCmd = true;
   auto ocbpos = concmdbufpos;
