@@ -1538,8 +1538,8 @@ public:
   }
 
 public:
-  @property ConCommand completer (ArgCompleteCB cb) { pragma(inline, true); argcomplete = cb; return this; }
-  @property ArgCompleteCB completer () pure { pragma(inline, true); return argcomplete; }
+  final @property ConCommand completer (ArgCompleteCB cb) { version(aliced) pragma(inline, true); argcomplete = cb; return this; }
+  final @property ArgCompleteCB completer () pure { version(aliced) pragma(inline, true); return argcomplete; }
 
 static:
   /// parse ch as digit in given base. return -1 if ch is not a valid digit.

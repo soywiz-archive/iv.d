@@ -2004,8 +2004,8 @@ public void conBaphometRender (scope void delegate (int x, int y) nothrow @trust
     }
   }
 
-  int scaleX (float v) nothrow @trusted @nogc => cast(int)floor(ofsx+v*scale);
-  int scaleY (float v) nothrow @trusted @nogc => cast(int)floor(ofsy+v*scale);
+  int scaleX (float v) nothrow @trusted @nogc { pragma(inline, true); return cast(int)floor(ofsx+v*scale); }
+  int scaleY (float v) nothrow @trusted @nogc { pragma(inline, true); return cast(int)floor(ofsy+v*scale); }
 
   if (path.length == 0) return;
   int cx = 0, cy = 0;
