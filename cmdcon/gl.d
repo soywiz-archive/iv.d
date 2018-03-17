@@ -65,8 +65,10 @@ public void glconCharInput (char ch) {
   consoleLock();
   scope(exit) consoleUnlock();
 
+  int rchgt = getEffectiveConHeight;
+
   if (ch == ConInputChar.PageUp) {
-    int lnx = rConsoleHeight/conCharHeight-2;
+    int lnx = rchgt/conCharHeight-2;
     if (lnx < 1) lnx = 1;
     conskiplines += lnx;
     conLastChange = 0;
@@ -75,7 +77,7 @@ public void glconCharInput (char ch) {
 
   if (ch == ConInputChar.PageDown) {
     if (conskiplines > 0) {
-      int lnx = rConsoleHeight/conCharHeight-2;
+      int lnx = rchgt/conCharHeight-2;
       if (lnx < 1) lnx = 1;
       if ((conskiplines -= lnx) < 0) conskiplines = 0;
       conLastChange = 0;
@@ -124,7 +126,7 @@ __gshared char rPromptChar = '>';
 __gshared float rConAlpha = 0.8;
 __gshared bool rConsoleVisible = false;
 __gshared bool rConsoleVisiblePrev = false;
-__gshared int rConsoleHeight = 10*3;
+__gshared float rConsoleHeight = 0.7;
 __gshared uint rConTextColor = 0x00ff00; // rgb
 __gshared uint rConCursorColor = 0xff7f00; // rgb
 __gshared uint rConInputColor = 0xffff00; // rgb
@@ -149,7 +151,7 @@ private void initConsole () {
   scrhgt = ascrhgt;
   conScale = ascale;
   conRegVar!rConsoleVisible("r_console", "console visibility"/*, ConVarAttr.Archive*/);
-  conRegVar!rConsoleHeight(10*3, scrhgt, "r_conheight", "console height", ConVarAttr.Archive);
+  conRegVar!rConsoleHeight(0, 1, "r_conheight", "console height", ConVarAttr.Archive);
   conRegVar!rConTextColor("r_contextcolor", "console log text color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
   conRegVar!rConCursorColor("r_concursorcolor", "console cursor color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
   conRegVar!rConInputColor("r_coninputcolor", "console input color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
@@ -157,8 +159,6 @@ private void initConsole () {
   conRegVar!rConStarColor("r_constarcolor", "console star color, 0xrrggbb", ConVarAttr.Archive, ConVarAttr.Hex);
   conRegVar!rPromptChar("r_conpromptchar", "console prompt character", ConVarAttr.Archive);
   conRegVar!rConAlpha("r_conalpha", "console transparency (0 is fully transparent, 1 is opaque)", ConVarAttr.Archive);
-  //rConsoleHeight = scrhgt-scrhgt/3;
-  rConsoleHeight = scrhgt/2;
   scrhgt = 0;
   conRegFunc!({
     import core.atomic;
@@ -177,10 +177,8 @@ public void glconInit (uint ascrwdt, uint ascrhgt, uint ascale=1) {
   if (ascale < 1 || ascale > 64) return;
   conScale = ascale;
   if (scrwdt != ascrwdt || scrhgt != ascrhgt || convbuf is null) {
-    if (rConsoleHeight > 0 && scrhgt > 0) rConsoleHeight = cast(int)(cast(double)rConsoleHeight/cast(double)scrhgt*cast(double)ascrhgt);
     scrwdt = ascrwdt;
     scrhgt = ascrhgt;
-    if (rConsoleHeight > scrhgt) rConsoleHeight = scrhgt;
     //conLastChange = 0;
   }
 }
@@ -289,6 +287,16 @@ private void glconCallShowHideHandler () {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private int getEffectiveConHeight () {
+  if (scrhgt < 1 || rConsoleHeight <= 0) return conCharHeight*3;
+  int rchgt = cast(int)(scrhgt*rConsoleHeight);
+  if (rchgt > scrhgt-conCharHeight*4) rchgt = scrhgt-conCharHeight*4;
+  if (rchgt < conCharHeight*3) rchgt = conCharHeight*3;
+  return rchgt;
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 /// render console (if it is visible). tries hard to not change OpenGL state.
 public void glconDraw () {
   glconCallShowHideHandler();
@@ -296,6 +304,8 @@ public void glconDraw () {
 
   consoleLock();
   scope(exit) consoleUnlock();
+
+  int rchgt = getEffectiveConHeight;
 
   bool regen = glconGenRenderBuffer();
   if (glconRenderFailed) return; // alas
@@ -330,7 +340,7 @@ public void glconDraw () {
           ximg.green_mask = 0x0000ff00;
           ximg.blue_mask = 0x000000ff;
           XInitImage(&ximg);
-          int desty = rConsoleHeight-scrhgt;
+          int desty = rchgt-scrhgt;
           auto dpy = glconDrawWindow.impl.display;
           Drawable drw = (glconDrawDirect ? cast(Drawable)glconDrawWindow.impl.window : cast(Drawable)glconDrawWindow.impl.buffer);
           GC gc = XCreateGC(dpy, drw, 0, null);
@@ -425,7 +435,7 @@ public void glconDraw () {
     //{ import core.stdc.stdio; printf("glconDraw: yep (%u)\n", convbufTexId); }
   }
 
-  int ofs = (scrhgt-rConsoleHeight)*conScale;
+  int ofs = (scrhgt-rchgt)*conScale;
   y -= ofs;
   h -= ofs;
   float alpha = rConAlpha;

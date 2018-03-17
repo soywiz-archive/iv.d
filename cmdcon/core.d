@@ -1514,6 +1514,9 @@ public:
   }
 
 public:
+  @property ConCommand completer (ArgCompleteCB cb) { pragma(inline, true); argcomplete = cb; return this; }
+  @property ArgCompleteCB completer () pure { pragma(inline, true); return argcomplete; }
+
 static:
   /// parse ch as digit in given base. return -1 if ch is not a valid digit.
   int digit(TC) (TC ch, uint base) pure nothrow @safe @nogc if (isSomeChar!TC) {
@@ -3014,7 +3017,7 @@ public struct ConFuncVA {
  *   aname = variable name
  *   ahelp = help text
  */
-public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn) {
+public ConFuncBase conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn) {
   // we have to make the class nested, so we can use `dg`, which keeps default args
 
   // hack for inline lambdas
@@ -3100,8 +3103,12 @@ public void conRegFunc(alias fn) (string aname, string ahelp) if (isCallable!fn)
     if (aname.length == 0) aname = (&fn).stringof[2..$]; // HACK
   }
   if (aname.length > 0) {
+    auto cf = new ConFunc(aname, ahelp);
     addName(aname);
-    cmdlist[aname] = new ConFunc(aname, ahelp);
+    cmdlist[aname] = cf;
+    return cf;
+  } else {
+    return null;
   }
 }
 
