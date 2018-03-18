@@ -4869,6 +4869,7 @@ public bool conProcessQueue (uint maxlen=0) {
         if (maxlen <= ebuf) maxlen = 0; else maxlen -= ebuf;
       }
       concmdbufpos = 0;
+      if (s.length == 0) break;
     }
     // process commands
     while (s.length) {
@@ -4876,8 +4877,6 @@ public bool conProcessQueue (uint maxlen=0) {
       if (cmd is null) break;
       if (cmd.length > int.max/8) { conwriteln("command too long"); continue; }
       try {
-        //consoleLock();
-        //scope(exit) consoleUnlock();
         version(iv_cmdcon_debug_wait) conwriteln("** <", cmd, ">");
         if (conExecute(cmd)) {
           // "wait" pseudocommand hit; prepend what is left
