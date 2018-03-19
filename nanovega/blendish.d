@@ -1421,7 +1421,7 @@ public void bndScrollBar (NVGContext ctx, float x, float y, float w, float h, BN
  *
  * vertical looks best when width is BND_SCROLLBAR_WIDTH
  */
-public void bndScrollSlider (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, float offset, float size) {
+public void bndScrollSlider (NVGContext ctx, float x, float y, float w, float h, BNDwidgetState state, float offset, float size=0) {
   bndBevelInset(ctx, x, y, w, h, BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS);
   bndInnerBox(ctx, x, y, w, h,
     BND_SCROLLBAR_RADIUS, BND_SCROLLBAR_RADIUS,
