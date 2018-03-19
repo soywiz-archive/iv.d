@@ -20,7 +20,6 @@ module iv.egeditor.editor /*is aliced*/;
 //version = egeditor_scan_time_to_file;
 
 import iv.alice;
-import iv.rawtty : koi2uni, uni2koi;
 import iv.strex;
 import iv.utfutil;
 import iv.vfs;
