@@ -52,6 +52,8 @@ private nothrow @trusted @nogc:
 
 version(aliced) {} else alias usize = size_t;
 
+//version = kiss_fft_use_parallel; // absolutely no reason to
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 ///
@@ -593,6 +595,27 @@ private void kf_work(S) (kiss_fft_cpx!S* Fout, const(kiss_fft_cpx!S)* f, in usiz
   immutable uint p = *factors++; // the radix
   immutable uint m = *factors++; // stage's fft length/p
   const(kiss_fft_cpx!S)* Fout_end = Fout+p*m;
+
+  version(kiss_fft_use_parallel) {
+    // use threads at the top-level (not recursive)
+    import std.parallelism;
+    import std.range : iota;
+    if (fstride == 1 && p <= 5) {
+      // execute the p different work units in different threads
+      foreach (uint k; parallel(iota(p))) {
+        kf_work!S(Fout+k*m, f+fstride*in_stride*k, fstride*p, in_stride, factors, st);
+      }
+      // all threads have joined by this point
+      switch (p) {
+        case 2: kf_bfly2!S(Fout, fstride, st, m); break;
+        case 3: kf_bfly3!S(Fout, fstride, st, m); break;
+        case 4: kf_bfly4!S(Fout, fstride, st, m); break;
+        case 5: kf_bfly5!S(Fout, fstride, st, m); break;
+        default: kf_bfly_generic!S(Fout, fstride, st, m, p); break;
+      }
+      return;
+    }
+  }
 
   if (m == 1) {
     do {
