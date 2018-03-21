@@ -2724,6 +2724,101 @@ void concmdRangeCompleter(IR, bool casesens=true) (ConCommand self, auto ref IR 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+/// helper function for [cmdconSetFileCompleter]
+public string[] cmdconFilesList (string pfx) nothrow {
+  static bool startsWith (const(char)[] str, const(char)[] prefix) pure nothrow @trusted @nogc {
+    if (prefix.length == 0) return true;
+    if (prefix.length > str.length) return false;
+    return (str[0..prefix.length] == prefix);
+  }
+
+  import std.file;
+  import std.path;
+  string[] res;
+  string path;
+  if (pfx.length == 0) {
+    path = ".";
+  } else {
+    if (pfx[$-1] == '/') {
+      path = pfx;
+      pfx = null;
+    } else {
+      path = pfx.dirName;
+      pfx = pfx.baseName;
+    }
+  }
+  string xxname (string fn, bool asDir=false) {
+    if (fn == "/") return fn;
+    if (asDir) {
+      if (fn == ".") return "./";
+    }
+    if (startsWith(fn, "./")) fn = fn[2..$];
+    if (asDir) fn ~= "/";
+    return fn;
+  }
+  try {
+    foreach (DirEntry de; dirEntries(path, SpanMode.shallow)) {
+      if (de.baseName.length == 0) continue;
+      if (de.baseName[0] == '.') continue;
+      try {
+        if (de.isFile) {
+          if (de.name.extension == ".cbz") {
+            if (pfx.length == 0 || startsWith(de.baseName, pfx)) res ~= xxname(de.name);
+          }
+        } else if (de.isDir) {
+          if (pfx.length == 0 || startsWith(de.baseName, pfx)) res ~= xxname(de.name, true);
+        }
+      } catch (Exception e) {} // sorry
+    }
+  } catch (Exception e) {} // sorry
+  import std.algorithm : sort;
+  res.sort!((string a, string b) {
+    if (a[$-1] == '/') {
+      if (b[$-1] != '/') return true;
+      return (a < b);
+    }
+    if (b[$-1] == '/') return false;
+    return (a < b);
+  });
+  return res;
+}
+
+
+/// if `getCurrentFile` is not null, and sole "!" is given as argument, current file will be put
+public void cmdconSetFileCompleter (ConCommand cmd, string delegate () nothrow getCurrentFile=null) {
+  if (cmd is null) return;
+  cmd.completer = delegate (ConCommand self) {
+    auto cs = conInputBuffer[0..conInputBufferCurX];
+    ConCommand.getWord(cs); // skip command
+    while (cs.length && cs[0] <= ' ') cs = cs[1..$];
+    // put currently loaded file to buffer
+    if (cs == "!" && getCurrentFile !is null) {
+      string cfn = getCurrentFile();
+      if (cfn.length) {
+        conAddInputChar(ConInputChar.Backspace); // remove "!"
+        foreach (char ch; cfn) conAddInputChar(ch);
+        return;
+      }
+    }
+    string[] list = cmdconFilesList(cs.idup);
+    if (list.length == 0) {
+      conwriteln(self.name, ": no matching files");
+      return;
+    }
+    auto lc = conInputLastChange();
+    self.concmdRangeCompleter(list);
+    // if we ended with "/ ", remove space
+    if (lc != conInputLastChange()) {
+      cs = conInputBuffer[0..conInputBufferCurX];
+      if (cs.length > 2 && cs[$-1] == ' ' && cs[$-2] == '/') {
+        conAddInputChar(ConInputChar.Backspace);
+      }
+    }
+  };
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 private void enumComplete(T) (ConCommand self) if (is(T == enum)) {
   auto cs = conInputBuffer[0..conInputBufferCurX];
   ConCommand.getWord(cs); // skip command
