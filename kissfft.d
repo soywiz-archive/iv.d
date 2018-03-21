@@ -59,22 +59,65 @@ public enum KissFFT { Direct, Inverse }
 
 ///
 //public alias kiss_fft_scalar = float;
-public alias kiss_fft_scalar = double;
-
+//public alias kiss_fft_scalar = double;
 
 ///
-public align(1) struct kiss_fft_cpx {
-align(1):
-  kiss_fft_scalar r;
-  kiss_fft_scalar i;
-
-  kiss_fft_scalar opIndex (uint n) const pure nothrow @trusted @nogc { pragma(inline, true); return (n ? i : r); }
-  void opIndexAssign (in kiss_fft_scalar v, uint n) nothrow @trusted @nogc { pragma(inline, true); if (n) i = v; else r = v; }
+public template kiss_fft_scalar(T) if (is(T == float) || is(T == double) || is(T == real)) {
+  alias kiss_fft_scalar = T;
 }
 
 
 ///
-public alias kiss_fft_cfg = kiss_fft_state*;
+public template isGoodKissFFTScalar(T) {
+  static if (is(T == float) || is(T == double) || is(T == real)) {
+    enum isGoodKissFFTScalar = true;
+  } else {
+    enum isGoodKissFFTScalar = false;
+  }
+}
+
+
+///
+public template isKissFFTComplex(T) {
+  static if (is(T : kiss_fft_cpx!S, S)) {
+    enum isKissFFTComplex = true;
+  } else {
+    enum isKissFFTComplex = false;
+  }
+}
+
+
+///
+public template KissFFTScalar(T) {
+  static if (is(T : kiss_fft_cpx!S, S)) {
+    alias KissFFTScalar = S;
+  } else {
+    static assert(0, "not a KissFFT complex type");
+  }
+}
+
+///
+public align(1) struct kiss_fft_cpx(T) if (is(T == float) || is(T == double) || is(T == real)) {
+align(1):
+  alias Scalar = T;
+  T r;
+  T i;
+
+  T opIndex (uint n) const pure nothrow @trusted @nogc { pragma(inline, true); return (n ? i : r); }
+  void opIndexAssign (in T v, uint n) nothrow @trusted @nogc { pragma(inline, true); if (n) i = v; else r = v; }
+}
+
+
+public alias kiss_fft_cpx_f = kiss_fft_cpx!float; ///
+public alias kiss_fft_cpx_d = kiss_fft_cpx!double; ///
+
+
+public alias kiss_fft_cfg_f = kiss_fft_state!float*; ///
+public alias kiss_fft_cfg_d = kiss_fft_state!double*; ///
+
+public template kiss_fft_cfg(T) if (is(T == float) || is(T == double) || is(T == real)) {
+  alias kiss_fft_cfg = kiss_fft_state!T*;
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -95,15 +138,17 @@ public alias kiss_fft_cfg = kiss_fft_state*;
  * If `lenmem` is not `null` and (`mem` is `null` or `*lenmem` is not large enough),
  * then the function returns `null` and places the minimum cfg buffer size in `*lenmem`.
  */
-public kiss_fft_cfg kiss_fft_alloc (uint nfft, KissFFT dir, void* mem=null, usize* lenmem=null) {
-  kiss_fft_cfg st = null;
-  usize memneeded = kiss_fft_state.sizeof+kiss_fft_cpx.sizeof*(nfft-1); /* twiddle factors */
+public kiss_fft_cfg!S kiss_fft_alloc(S) (uint nfft, KissFFT dir, void* mem=null, usize* lenmem=null)
+if (is(S == float) || is(S == double) || is(S == real))
+{
+  kiss_fft_cfg!S st = null;
+  usize memneeded = (kiss_fft_state!S).sizeof+(kiss_fft_cpx!S).sizeof*(nfft-1); // twiddle factors
 
   if (lenmem is null) {
     import core.stdc.stdlib : malloc;
-    st = cast(kiss_fft_cfg)malloc(memneeded);
+    st = cast(kiss_fft_cfg!S)malloc(memneeded);
   } else {
-    if (mem !is null && *lenmem >= memneeded) st = cast(kiss_fft_cfg)mem;
+    if (mem !is null && *lenmem >= memneeded) st = cast(kiss_fft_cfg!S)mem;
     *lenmem = memneeded;
   }
 
@@ -116,7 +161,7 @@ public kiss_fft_cfg kiss_fft_alloc (uint nfft, KissFFT dir, void* mem=null, usiz
       //if (st.inverse) phase = -phase;
       mixin(kf_cexp!("st.twiddles.ptr+i", "phase"));
     }
-    kf_factor(nfft, st.factors.ptr);
+    kf_factor!S(nfft, st.factors.ptr);
   }
 
   return st;
@@ -126,7 +171,9 @@ public kiss_fft_cfg kiss_fft_alloc (uint nfft, KissFFT dir, void* mem=null, usiz
 /** If kiss_fft_alloc allocated a buffer, it is one contiguous
  * buffer and can be simply free()d when no longer needed
  */
-public void kiss_fft_free (ref kiss_fft_cfg p) {
+public void kiss_fft_free(S) (ref kiss_fft_cfg!S p)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   if (p !is null) {
     import core.stdc.stdlib : free;
     free(p);
@@ -142,14 +189,18 @@ public void kiss_fft_free (ref kiss_fft_cfg p) {
  * fout will be   F[0] , F[1] , ... ,F[nfft-1]
  * Note that each element is complex and can be accessed like f[k].r and f[k].i
  */
-public void kiss_fft (kiss_fft_cfg cfg, const(kiss_fft_cpx)* fin, kiss_fft_cpx* fout) {
+public void kiss_fft(S) (kiss_fft_cfg!S cfg, const(kiss_fft_cpx!S)* fin, kiss_fft_cpx!S* fout)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   assert(cfg !is null);
-  kiss_fft_stride(cfg, fin, fout, 1);
+  kiss_fft_stride!S(cfg, fin, fout, 1);
 }
 
 
 /** A more generic version of the above function. It reads its input from every Nth sample. */
-public void kiss_fft_stride (kiss_fft_cfg st, const(kiss_fft_cpx)* fin, kiss_fft_cpx* fout, uint in_stride) {
+public void kiss_fft_stride(S) (kiss_fft_cfg!S st, const(kiss_fft_cpx!S)* fin, kiss_fft_cpx!S* fout, uint in_stride)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   import core.stdc.stdlib : alloca;
   assert(st !is null);
   if (fin is fout) {
@@ -157,12 +208,12 @@ public void kiss_fft_stride (kiss_fft_cfg st, const(kiss_fft_cpx)* fin, kiss_fft
     //NOTE: this is not really an in-place FFT algorithm.
     //It just performs an out-of-place FFT into a temp buffer
     //kiss_fft_cpx* tmpbuf = cast(kiss_fft_cpx*)KISS_FFT_TMP_ALLOC(kiss_fft_cpx.sizeof*st.nfft);
-    kiss_fft_cpx* tmpbuf = cast(kiss_fft_cpx*)alloca(kiss_fft_cpx.sizeof*st.nfft);
-    kf_work(tmpbuf, fin, 1, in_stride, st.factors.ptr, st);
-    memcpy(fout, tmpbuf, kiss_fft_cpx.sizeof*st.nfft);
+    kiss_fft_cpx!S* tmpbuf = cast(kiss_fft_cpx!S*)alloca((kiss_fft_cpx!S).sizeof*st.nfft);
+    kf_work!S(tmpbuf, fin, 1, in_stride, st.factors.ptr, st);
+    memcpy(fout, tmpbuf, (kiss_fft_cpx!S).sizeof*st.nfft);
     //KISS_FFT_TMP_FREE(tmpbuf);
   } else {
-    kf_work(fout, fin, 1, in_stride, st.factors.ptr, st);
+    kf_work!S(fout, fin, 1, in_stride, st.factors.ptr, st);
   }
 }
 
@@ -184,12 +235,19 @@ public uint kiss_fft_next_fast_size (uint n) {
 // ////////////////////////////////////////////////////////////////////////// //
 // kissfftr
 // Real optimized version can save about 45% cpu time vs. complex fft of a real seq.
-public alias kiss_fftr_cfg = kiss_fftr_state*;
 
-struct kiss_fftr_state {
-  kiss_fft_cfg substate;
-  kiss_fft_cpx* tmpbuf;
-  kiss_fft_cpx* super_twiddles;
+public alias kiss_fftr_cfg_f = kiss_fftr_state!float*; ///
+public alias kiss_fftr_cfg_d = kiss_fftr_state!double*; ///
+
+///
+public template kiss_fftr_cfg(T) if (is(T == float) || is(T == double) || is(T == real)) {
+  alias kiss_fftr_cfg = kiss_fftr_state!T*;
+}
+
+struct kiss_fftr_state(S) if (is(S == float) || is(S == double) || is(S == real)) {
+  kiss_fft_cfg!S substate;
+  kiss_fft_cpx!S* tmpbuf;
+  kiss_fft_cpx!S* super_twiddles;
 }
 
 
@@ -198,29 +256,31 @@ struct kiss_fftr_state {
  *
  * If you don't care to allocate space, use mem = lenmem = null
  */
-public kiss_fftr_cfg kiss_fftr_alloc (uint nfft, KissFFT dir, void* mem, usize* lenmem) {
-  kiss_fftr_cfg st = null;
+public kiss_fftr_cfg!S kiss_fftr_alloc(S) (uint nfft, KissFFT dir, void* mem, usize* lenmem)
+if (is(S == float) || is(S == double) || is(S == real))
+{
+  kiss_fftr_cfg!S st = null;
   usize subsize, memneeded;
 
   if (nfft&1) return null; //assert(0, "real FFT optimization must be even");
   nfft >>= 1;
 
-  kiss_fft_alloc(nfft, dir, null, &subsize);
-  memneeded = kiss_fftr_state.sizeof+subsize+kiss_fft_cpx.sizeof*(nfft*3/2);
+  kiss_fft_alloc!S(nfft, dir, null, &subsize);
+  memneeded = (kiss_fftr_state!S).sizeof+subsize+(kiss_fft_cpx!S).sizeof*(nfft*3/2);
 
   if (lenmem is null) {
     import core.stdc.stdlib : malloc;
-    st = cast(kiss_fftr_cfg)malloc(memneeded);
+    st = cast(kiss_fftr_cfg!S)malloc(memneeded);
   } else {
-    if (*lenmem >= memneeded) st = cast(kiss_fftr_cfg)mem;
+    if (*lenmem >= memneeded) st = cast(kiss_fftr_cfg!S)mem;
     *lenmem = memneeded;
   }
   if (st is null) return null;
 
-  st.substate = cast(kiss_fft_cfg)(st+1); // just beyond kiss_fftr_state struct
-  st.tmpbuf = cast(kiss_fft_cpx*)((cast(ubyte*)st.substate)+subsize);
+  st.substate = cast(kiss_fft_cfg!S)(st+1); // just beyond kiss_fftr_state struct
+  st.tmpbuf = cast(kiss_fft_cpx!S*)((cast(ubyte*)st.substate)+subsize);
   st.super_twiddles = st.tmpbuf+nfft;
-  kiss_fft_alloc(nfft, dir, st.substate, &subsize);
+  kiss_fft_alloc!S(nfft, dir, st.substate, &subsize);
 
   foreach (immutable i; 0..nfft/2) {
     enum pi = 3.141592653589793238462643383279502884197169399375105820974944;
@@ -234,7 +294,9 @@ public kiss_fftr_cfg kiss_fftr_alloc (uint nfft, KissFFT dir, void* mem, usize* 
 
 
 /** Use this to free `fftr` buffer. */
-public void kiss_fft_free (ref kiss_fftr_cfg p) {
+public void kiss_fft_free(S) (ref kiss_fftr_cfg!S p)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   if (p !is null) {
     import core.stdc.stdlib : free;
     free(p);
@@ -246,17 +308,19 @@ public void kiss_fft_free (ref kiss_fftr_cfg p) {
 /** input timedata has nfft scalar points
  * output freqdata has nfft/2+1 complex points
  */
-public void kiss_fftr (kiss_fftr_cfg st, const(kiss_fft_scalar)* timedata, kiss_fft_cpx* freqdata) {
+public void kiss_fftr(S) (kiss_fftr_cfg!S st, const(kiss_fft_scalar!S)* timedata, kiss_fft_cpx!S* freqdata)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   // input buffer timedata is stored row-wise
   uint k, ncfft;
-  kiss_fft_cpx fpnk, fpk, f1k, f2k, tw, tdc;
+  kiss_fft_cpx!S fpnk, fpk, f1k, f2k, tw, tdc;
 
   if (st.substate.inverse) assert(0, "kiss fft usage error: improper alloc");
 
   ncfft = st.substate.nfft;
 
   // perform the parallel fft of two real signals packed in real,imag
-  kiss_fft(st.substate, cast(const(kiss_fft_cpx)*)timedata, st.tmpbuf);
+  kiss_fft!S(st.substate, cast(const(kiss_fft_cpx!S)*)timedata, st.tmpbuf);
   /* The real part of the DC element of the frequency spectrum in st.tmpbuf
    * contains the sum of the even-numbered elements of the input time sequence
    * The imag part is the sum of the odd-numbered elements
@@ -293,23 +357,22 @@ public void kiss_fftr (kiss_fftr_cfg st, const(kiss_fft_scalar)* timedata, kiss_
 /** input freqdata has  nfft/2+1 complex points
  * output timedata has nfft scalar points
  */
-public void kiss_fftri (kiss_fftr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_fft_scalar* timedata) {
+public void kiss_fftri(S) (kiss_fftr_cfg!S st, const(kiss_fft_cpx!S)* freqdata, kiss_fft_scalar!S* timedata)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   // input buffer timedata is stored row-wise
-  uint k, ncfft;
-
   if (st.substate.inverse == 0) assert(0, "kiss fft usage error: improper alloc");
 
-  ncfft = st.substate.nfft;
+  uint ncfft = st.substate.nfft;
 
   st.tmpbuf[0].r = freqdata[0].r+freqdata[ncfft].r;
   st.tmpbuf[0].i = freqdata[0].r-freqdata[ncfft].r;
 
-  for (k = 1; k <= ncfft/2; ++k) {
-    kiss_fft_cpx fk, fnkc, fek, fok, tmp;
-    fk = freqdata[k];
+  foreach (immutable uint k; 1..ncfft/2+1) {
+    kiss_fft_cpx!S fnkc = void, fek = void, fok = void, tmp = void;
+    kiss_fft_cpx!S fk = freqdata[k];
     fnkc.r = freqdata[ncfft-k].r;
     fnkc.i = -freqdata[ncfft-k].i;
-
     mixin(C_ADD!("fek", "fk", "fnkc"));
     mixin(C_SUB!("tmp", "fk", "fnkc"));
     mixin(C_MUL!("fok", "tmp", "st.super_twiddles[k-1]"));
@@ -317,12 +380,13 @@ public void kiss_fftri (kiss_fftr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_ff
     mixin(C_SUB!("st.tmpbuf[ncfft-k]", "fek", "fok"));
     st.tmpbuf[ncfft-k].i *= -1;
   }
-  kiss_fft(st.substate, st.tmpbuf, cast(kiss_fft_cpx*)timedata);
+  kiss_fft!S(st.substate, st.tmpbuf, cast(kiss_fft_cpx!S*)timedata);
 }
 
 
 /** for real ffts, we need an even size */
 public uint kiss_fftr_next_fast_size_real (uint n) {
+  pragma(inline, true);
   return kiss_fft_next_fast_size((n+1)>>1)<<1;
 }
 
@@ -334,19 +398,19 @@ enum MAXFACTORS = 32;
  4*4*4*2
  */
 
-struct kiss_fft_state {
-  int nfft;
-  int inverse;
-  int[2*MAXFACTORS] factors;
-  kiss_fft_cpx[1] twiddles;
+struct kiss_fft_state(S) if (is(S == float) || is(S == double) || is(S == real)) {
+  uint nfft;
+  uint inverse;
+  uint[2*MAXFACTORS] factors;
+  kiss_fft_cpx!S[1] twiddles;
 }
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private void kf_bfly2 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m) {
-  kiss_fft_cpx* Fout2;
-  const(kiss_fft_cpx)* tw1 = st.twiddles.ptr;
-  kiss_fft_cpx t;
+private void kf_bfly2(S) (kiss_fft_cpx!S* Fout, in usize fstride, const(kiss_fft_cfg!S) st, int m) {
+  kiss_fft_cpx!S* Fout2;
+  const(kiss_fft_cpx!S)* tw1 = st.twiddles.ptr;
+  kiss_fft_cpx!S t;
   Fout2 = Fout+m;
   do {
     mixin(C_MUL!("t", "*Fout2", "*tw1"));
@@ -359,9 +423,9 @@ private void kf_bfly2 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg)
 }
 
 
-private void kf_bfly4 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, in usize m) {
-  const(kiss_fft_cpx)* tw1, tw2, tw3;
-  kiss_fft_cpx[6] scratch = void;
+private void kf_bfly4(S) (kiss_fft_cpx!S* Fout, in usize fstride, const(kiss_fft_cfg!S) st, in usize m) {
+  const(kiss_fft_cpx!S)* tw1, tw2, tw3;
+  kiss_fft_cpx!S[6] scratch = void;
   usize k = m;
   immutable usize m2 = 2*m;
   immutable usize m3 = 3*m;
@@ -397,12 +461,12 @@ private void kf_bfly4 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg)
 }
 
 
-private void kf_bfly3 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, usize m) {
+private void kf_bfly3(S) (kiss_fft_cpx!S* Fout, in usize fstride, const(kiss_fft_cfg!S) st, usize m) {
   usize k = m;
   immutable usize m2 = 2*m;
-  const(kiss_fft_cpx)* tw1, tw2;
-  kiss_fft_cpx[5] scratch = void;
-  kiss_fft_cpx epi3;
+  const(kiss_fft_cpx!S)* tw1, tw2;
+  kiss_fft_cpx!S[5] scratch = void;
+  kiss_fft_cpx!S epi3;
   epi3 = st.twiddles[fstride*m];
   tw1 = tw2 = st.twiddles.ptr;
   do {
@@ -432,15 +496,13 @@ private void kf_bfly3 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg)
 }
 
 
-private void kf_bfly5 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m) {
-  kiss_fft_cpx* Fout0, Fout1, Fout2, Fout3, Fout4;
-  int u;
-  kiss_fft_cpx[13] scratch = void;
-  const(kiss_fft_cpx)* twiddles = st.twiddles.ptr;
-  const(kiss_fft_cpx)* tw;
-  kiss_fft_cpx ya, yb;
-  ya = twiddles[fstride*m];
-  yb = twiddles[fstride*2*m];
+private void kf_bfly5(S) (kiss_fft_cpx!S* Fout, in usize fstride, const(kiss_fft_cfg!S) st, uint m) {
+  kiss_fft_cpx!S* Fout0, Fout1, Fout2, Fout3, Fout4;
+  kiss_fft_cpx!S[13] scratch = void;
+  const(kiss_fft_cpx!S)* twiddles = st.twiddles.ptr;
+  const(kiss_fft_cpx!S)* tw;
+  kiss_fft_cpx!S ya = twiddles[fstride*m];
+  kiss_fft_cpx!S yb = twiddles[fstride*2*m];
 
   Fout0 = Fout;
   Fout1 = Fout0+m;
@@ -449,7 +511,7 @@ private void kf_bfly5 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg)
   Fout4 = Fout0+4*m;
 
   tw = st.twiddles.ptr;
-  for (u = 0; u < m; ++u) {
+  foreach (immutable uint u; 0..m) {
     scratch[0] = *Fout0;
 
     mixin(C_MUL!("scratch[1]", "*Fout1", "tw[u*fstride]"));
@@ -491,28 +553,29 @@ private void kf_bfly5 (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg)
 }
 
 // perform the butterfly for one stage of a mixed radix FFT
-private void kf_bfly_generic (kiss_fft_cpx* Fout, in usize fstride, const(kiss_fft_cfg) st, int m, int p) {
+private void kf_bfly_generic(S) (kiss_fft_cpx!S* Fout, in usize fstride, const(kiss_fft_cfg!S) st, uint m, uint p) {
   import core.stdc.stdlib : alloca;
-  int u, k, q1, q;
-  const(kiss_fft_cpx)* twiddles = st.twiddles.ptr;
-  kiss_fft_cpx t;
-  int Norig = st.nfft;
+
+  //uint q1, q;
+  const(kiss_fft_cpx!S)* twiddles = st.twiddles.ptr;
+  kiss_fft_cpx!S t;
+  uint Norig = st.nfft;
 
   //kiss_fft_cpx* scratch = cast(kiss_fft_cpx*)KISS_FFT_TMP_ALLOC(kiss_fft_cpx.sizeof*p);
-  kiss_fft_cpx* scratch = cast(kiss_fft_cpx*)alloca(kiss_fft_cpx.sizeof*p);
+  kiss_fft_cpx!S* scratch = cast(kiss_fft_cpx!S*)alloca((kiss_fft_cpx!S).sizeof*p);
 
-  for (u = 0; u < m; ++u) {
-    k = u;
-    for (q1 = 0; q1 < p; ++q1) {
+  foreach (immutable uint u; 0..m) {
+    uint k = u;
+    foreach (immutable uint q1; 0..p) {
       scratch[q1] = Fout[k];
       k += m;
     }
 
     k = u;
-    for (q1 = 0; q1 < p; ++q1) {
-      int twidx = 0;
+    foreach (immutable uint q1; 0..p) {
+      uint twidx = 0;
       Fout[k] = scratch[0];
-      for (q = 1; q < p; ++q) {
+      foreach (immutable uint q; 1..p) {
         twidx += fstride*k;
         if (twidx >= Norig) twidx -= Norig;
         mixin(C_MUL!("t", "scratch[q]", "twiddles[twidx]"));
@@ -525,37 +588,37 @@ private void kf_bfly_generic (kiss_fft_cpx* Fout, in usize fstride, const(kiss_f
 }
 
 
-private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in usize fstride, int in_stride, int* factors, const(kiss_fft_cfg) st) {
-  kiss_fft_cpx* Fout_beg = Fout;
-  immutable int p = *factors++; // the radix
-  immutable int m = *factors++; // stage's fft length/p
-  const(kiss_fft_cpx)* Fout_end = Fout+p*m;
+private void kf_work(S) (kiss_fft_cpx!S* Fout, const(kiss_fft_cpx!S)* f, in usize fstride, uint in_stride, uint* factors, const(kiss_fft_cfg!S) st) {
+  kiss_fft_cpx!S* Fout_beg = Fout;
+  immutable uint p = *factors++; // the radix
+  immutable uint m = *factors++; // stage's fft length/p
+  const(kiss_fft_cpx!S)* Fout_end = Fout+p*m;
 
   if (m == 1) {
     do {
       *Fout = *f;
       f += fstride*in_stride;
-    } while (++Fout != Fout_end);
+    } while (++Fout !is Fout_end);
   } else {
     do {
       // recursive call:
       // DFT of size m*p performed by doing
       // p instances of smaller DFTs of size m,
       // each one takes a decimated version of the input
-      kf_work (Fout, f, fstride*p, in_stride, factors, st);
+      kf_work!S(Fout, f, fstride*p, in_stride, factors, st);
       f += fstride*in_stride;
-    } while ((Fout += m) != Fout_end);
+    } while ((Fout += m) !is Fout_end);
   }
 
   Fout = Fout_beg;
 
   // recombine the p smaller DFTs
   switch (p) {
-    case 2: kf_bfly2(Fout, fstride, st, m); break;
-    case 3: kf_bfly3(Fout, fstride, st, m); break;
-    case 4: kf_bfly4(Fout, fstride, st, m); break;
-    case 5: kf_bfly5(Fout, fstride, st, m); break;
-    default: kf_bfly_generic(Fout, fstride, st, m, p); break;
+    case 2: kf_bfly2!S(Fout, fstride, st, m); break;
+    case 3: kf_bfly3!S(Fout, fstride, st, m); break;
+    case 4: kf_bfly4!S(Fout, fstride, st, m); break;
+    case 5: kf_bfly5!S(Fout, fstride, st, m); break;
+    default: kf_bfly_generic!S(Fout, fstride, st, m, p); break;
   }
 }
 
@@ -565,10 +628,10 @@ private void kf_work (kiss_fft_cpx* Fout, const(kiss_fft_cpx)* f, in usize fstri
  *   p[i]*m[i] = m[i-1]
  *   m0 = n
  */
-private void kf_factor (int n, int* facbuf) {
+private void kf_factor(S) (uint n, uint* facbuf) {
   import std.math : floor, sqrt;
   immutable double floor_sqrt = floor(sqrt(cast(double)n));
-  int p = 4;
+  uint p = 4;
   // factor out powers of 4, powers of 2, then any remaining primes
   do {
     while (n%p) {
@@ -584,6 +647,8 @@ private void kf_factor (int n, int* facbuf) {
     *facbuf++ = n;
   } while (n > 1);
 }
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // kissfft_guts
 /*
@@ -610,7 +675,7 @@ enum C_SUBFROM(string res, string a) = "{ ("~res~").r -= ("~a~").r; ("~res~").i 
 //kiss_fft_scalar KISS_FFT_COS(T) (T phase) { import std.math : cos; return cos(phase); }
 //kiss_fft_scalar KISS_FFT_SIN(T) (T phase) { import std.math : sin; return sin(phase); }
 //kiss_fft_scalar HALF_OF (kiss_fft_scalar x) { return x*cast(kiss_fft_scalar)0.5; }
-enum HALF_OF(string x) = "(cast(kiss_fft_scalar)(("~x~")*cast(kiss_fft_scalar)0.5))";
+enum HALF_OF(string x) = "(cast(kiss_fft_scalar!S)(("~x~")*cast(kiss_fft_scalar!S)0.5))";
 
 //enum kf_cexp(string x, string phase) = "{ ("~x~").r = KISS_FFT_COS("~phase~"); ("~x~").i = KISS_FFT_SIN("~phase~"); }";
 enum kf_cexp(string x, string phase) = "{ import std.math : cos, sin; ("~x~").r = cos("~phase~"); ("~x~").i = sin("~phase~"); }";
@@ -633,45 +698,54 @@ enum kf_cexp(string x, string phase) = "{ import std.math : cos, sin; ("~x~").r 
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-///
-public alias kiss_fftnd_cfg = kiss_fftnd_state*;
 
-struct kiss_fftnd_state {
-  int dimprod; /* dimsum would be mighty tasty right now */
+public alias kiss_fftnd_cfg_f = kiss_fftnd_state!float*; ///
+public alias kiss_fftnd_cfg_d = kiss_fftnd_state!double*; ///
+
+public template kiss_fftnd_cfg(T) if (is(T == float) || is(T == double) || is(T == real)) {
+  alias kiss_fftnd_cfg = kiss_fftnd_state!T*;
+}
+
+struct kiss_fftnd_state(S)
+if (is(S == float) || is(S == double) || is(S == real))
+{
+  uint dimprod; /* dimsum would be mighty tasty right now */
   uint ndims;
   uint* dims;
-  kiss_fft_cfg* states; /* cfg states for each dimension */
-  kiss_fft_cpx* tmpbuf; /* buffer capable of hold the entire input */
+  kiss_fft_cfg!S* states; /* cfg states for each dimension */
+  kiss_fft_cpx!S* tmpbuf; /* buffer capable of hold the entire input */
 }
 
 
 ///
-public kiss_fftnd_cfg kiss_fftnd_alloc (const(uint)[] dims, KissFFT dir, void* mem=null, usize* lenmem=null) {
+public kiss_fftnd_cfg!S kiss_fftnd_alloc(S) (const(uint)[] dims, KissFFT dir, void* mem=null, usize* lenmem=null)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   import core.stdc.stdlib : malloc;
 
   if (dims.length < 1 || dims.length > ushort.max) return null;
   immutable uint ndims = cast(uint)dims.length;
-  kiss_fftnd_cfg st = null;
+  kiss_fftnd_cfg!S st = null;
   int dimprod = 1;
-  usize memneeded = kiss_fftnd_state.sizeof;
+  usize memneeded = (kiss_fftnd_state!S).sizeof;
   ubyte* ptr;
 
   foreach (immutable uint i; 0..ndims) {
     usize sublen = 0;
-    kiss_fft_alloc(dims[i], dir, null, &sublen);
+    kiss_fft_alloc!S(dims[i], dir, null, &sublen);
     memneeded += sublen; /* st.states[i] */
     dimprod *= dims[i];
   }
   memneeded += int.sizeof*ndims;/*  st.dims */
   memneeded += (void*).sizeof*ndims;/* st.states  */
-  memneeded += kiss_fft_cpx.sizeof*dimprod; /* st.tmpbuf */
+  memneeded += (kiss_fft_cpx!S).sizeof*dimprod; /* st.tmpbuf */
 
   if (lenmem is null) {
     /* allocate for the caller */
-    st = cast(kiss_fftnd_cfg)malloc(memneeded);
+    st = cast(kiss_fftnd_cfg!S)malloc(memneeded);
   } else {
     /* initialize supplied buffer if big enough */
-    if (*lenmem >= memneeded) st = cast(kiss_fftnd_cfg)mem;
+    if (*lenmem >= memneeded) st = cast(kiss_fftnd_cfg!S)mem;
     *lenmem = memneeded; /* tell caller how big struct is (or would be) */
   }
   if (st is null) return null; /* malloc failed or buffer too small */
@@ -680,20 +754,20 @@ public kiss_fftnd_cfg kiss_fftnd_alloc (const(uint)[] dims, KissFFT dir, void* m
   st.ndims = ndims;
   ptr = cast(ubyte*)(st+1);
 
-  st.states = cast(kiss_fft_cfg*)ptr;
+  st.states = cast(kiss_fft_cfg!S*)ptr;
   ptr += (void*).sizeof*ndims;
 
   st.dims = cast(uint*)ptr;
   ptr += int.sizeof*ndims;
 
-  st.tmpbuf = cast(kiss_fft_cpx*)ptr;
-  ptr += kiss_fft_cpx.sizeof*dimprod;
+  st.tmpbuf = cast(kiss_fft_cpx!S*)ptr;
+  ptr += (kiss_fft_cpx!S).sizeof*dimprod;
 
   foreach (immutable uint i; 0..ndims) {
     usize len;
     st.dims[i] = dims[i];
-    kiss_fft_alloc (st.dims[i], dir, null, &len);
-    st.states[i] = kiss_fft_alloc(st.dims[i], dir, ptr, &len);
+    kiss_fft_alloc!S(st.dims[i], dir, null, &len);
+    st.states[i] = kiss_fft_alloc!S(st.dims[i], dir, ptr, &len);
     ptr += len;
   }
 
@@ -702,7 +776,9 @@ public kiss_fftnd_cfg kiss_fftnd_alloc (const(uint)[] dims, KissFFT dir, void* m
 
 
 ///
-public void kiss_fftnd_free (ref kiss_fftnd_cfg p) {
+public void kiss_fftnd_free(S) (ref kiss_fftnd_cfg!S p)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   if (p !is null) {
     import core.stdc.stdlib : free;
     free(p);
@@ -773,17 +849,19 @@ Stage 2 ( D=4) treats this buffer as a 4*6 matrix,
  , i.e. the summation of all 24 input elements.
 
 */
-public void kiss_fftnd (kiss_fftnd_cfg st, const(kiss_fft_cpx)* fin, kiss_fft_cpx* fout) {
+public void kiss_fftnd(S) (kiss_fftnd_cfg!S st, const(kiss_fft_cpx!S)* fin, kiss_fft_cpx!S* fout)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   import core.stdc.string : memcpy;
 
-  const(kiss_fft_cpx)* bufin = fin;
-  kiss_fft_cpx* bufout;
+  const(kiss_fft_cpx!S)* bufin = fin;
+  kiss_fft_cpx!S* bufout;
 
   /* arrange it so the last bufout == fout */
   if (st.ndims&1) {
     bufout = fout;
     if (fin is fout) {
-      memcpy(st.tmpbuf, fin, kiss_fft_cpx.sizeof*st.dimprod);
+      memcpy(st.tmpbuf, fin, (kiss_fft_cpx!S).sizeof*st.dimprod);
       bufin = st.tmpbuf;
     }
   } else {
@@ -795,7 +873,7 @@ public void kiss_fftnd (kiss_fftnd_cfg st, const(kiss_fft_cpx)* fin, kiss_fft_cp
     uint stride = st.dimprod/curdim;
 
     foreach (immutable uint i; 0..stride) {
-      kiss_fft_stride(st.states[k], bufin+i, bufout+i*curdim, stride);
+      kiss_fft_stride!S(st.states[k], bufin+i, bufout+i*curdim, stride);
     }
 
     /* toggle back and forth between the two buffers */
@@ -811,14 +889,21 @@ public void kiss_fftnd (kiss_fftnd_cfg st, const(kiss_fft_cpx)* fin, kiss_fft_cp
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-///
-public alias kiss_fftndr_cfg = kiss_fftndr_state*;
 
-struct kiss_fftndr_state {
-  int dimReal;
-  int dimOther;
-  kiss_fftr_cfg cfg_r;
-  kiss_fftnd_cfg cfg_nd;
+public alias kiss_fftndr_cfg_f = kiss_fftndr_state!float*; ///
+public alias kiss_fftndr_cfg_d = kiss_fftndr_state!double*; ///
+
+public template kiss_fftndr_cfg(T) if (is(T == float) || is(T == double) || is(T == real)) {
+  alias kiss_fftndr_cfg = kiss_fftndr_state!T*;
+}
+
+struct kiss_fftndr_state(S)
+if (is(S == float) || is(S == double) || is(S == real))
+{
+  uint dimReal;
+  uint dimOther;
+  kiss_fftr_cfg!S cfg_r;
+  kiss_fftnd_cfg!S cfg_nd;
   ubyte* tmpbuf;
 }
 
@@ -839,33 +924,35 @@ dims[0] must be even
 
 If you don't care to allocate space, use mem = lenmem = null
 */
-public kiss_fftndr_cfg kiss_fftndr_alloc (const(uint)[] dims, KissFFT dir, void* mem=null, usize* lenmem=null) {
+public kiss_fftndr_cfg!S kiss_fftndr_alloc(S) (const(uint)[] dims, KissFFT dir, void* mem=null, usize* lenmem=null)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   import core.stdc.stdlib : malloc, free;
   import core.stdc.string : memset;
 
   if (dims.length < 1 || dims.length > ushort.max) return null;
   immutable uint ndims = cast(uint)dims.length;
 
-  kiss_fftndr_cfg st = null;
+  kiss_fftndr_cfg!S st = null;
   usize nr = 0, nd = 0, ntmp = 0;
   uint dimReal = dims[ndims-1];
   uint dimOther = prod(dims[0..$-1]);
   usize memneeded;
 
-  kiss_fftr_alloc(dimReal, dir, null, &nr);
-  kiss_fftnd_alloc(dims[0..$-1], dir, null, &nd);
+  kiss_fftr_alloc!S(dimReal, dir, null, &nr);
+  kiss_fftnd_alloc!S(dims[0..$-1], dir, null, &nd);
   ntmp =
-      MAX(2*dimOther, dimReal+2)*kiss_fft_scalar.sizeof+ // freq buffer for one pass
-      dimOther*(dimReal+2)*kiss_fft_scalar.sizeof; // large enough to hold entire input in case of in-place
+      MAX(2*dimOther, dimReal+2)*(kiss_fft_scalar!S).sizeof+ // freq buffer for one pass
+      dimOther*(dimReal+2)*(kiss_fft_scalar!S).sizeof; // large enough to hold entire input in case of in-place
 
-  memneeded = kiss_fftndr_state.sizeof+nr+nd+ntmp;
+  memneeded = (kiss_fftndr_state!S).sizeof+nr+nd+ntmp;
 
   bool malloced = false;
   if (lenmem is null) {
-    st = cast(kiss_fftndr_cfg)malloc(memneeded);
+    st = cast(kiss_fftndr_cfg!S)malloc(memneeded);
     malloced = true;
   } else {
-    if (*lenmem >= memneeded) st = cast(kiss_fftndr_cfg)mem;
+    if (*lenmem >= memneeded) st = cast(kiss_fftndr_cfg!S)mem;
     *lenmem = memneeded;
   }
   if (st is null) return null;
@@ -874,9 +961,9 @@ public kiss_fftndr_cfg kiss_fftndr_alloc (const(uint)[] dims, KissFFT dir, void*
 
   st.dimReal = dimReal;
   st.dimOther = dimOther;
-  st.cfg_r = kiss_fftr_alloc(dimReal, dir, st+1, &nr);
+  st.cfg_r = kiss_fftr_alloc!S(dimReal, dir, st+1, &nr);
   if (st.cfg_r is null) { if (malloced) free(st); return null; }
-  st.cfg_nd = kiss_fftnd_alloc(dims[0..$-1], dir, (cast(ubyte*)st.cfg_r)+nr, &nd);
+  st.cfg_nd = kiss_fftnd_alloc!S(dims[0..$-1], dir, (cast(ubyte*)st.cfg_r)+nr, &nd);
   if (st.cfg_nd is null) { if (malloced) free(st); return null; }
   st.tmpbuf = cast(ubyte*)st.cfg_nd+nd;
   assert(st.tmpbuf !is null);
@@ -886,7 +973,9 @@ public kiss_fftndr_cfg kiss_fftndr_alloc (const(uint)[] dims, KissFFT dir, void*
 
 
 ///
-public void kiss_fftndr_free (ref kiss_fftndr_cfg p) {
+public void kiss_fftndr_free(S) (ref kiss_fftndr_cfg!S p)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   if (p !is null) {
     import core.stdc.stdlib : free;
     free(p);
@@ -899,25 +988,27 @@ public void kiss_fftndr_free (ref kiss_fftndr_cfg p) {
 input timedata has dims[0] X dims[1] X ... X  dims[ndims-1] scalar points
 output freqdata has dims[0] X dims[1] X ... X  dims[ndims-1]/2+1 complex points
 */
-public void kiss_fftndr (kiss_fftndr_cfg st, const(kiss_fft_scalar)* timedata, kiss_fft_cpx* freqdata) {
+public void kiss_fftndr(S) (kiss_fftndr_cfg!S st, const(kiss_fft_scalar!S)* timedata, kiss_fft_cpx!S* freqdata)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   uint dimReal = st.dimReal;
   uint dimOther = st.dimOther;
   uint nrbins = dimReal/2+1;
 
-  kiss_fft_cpx* tmp1 = cast(kiss_fft_cpx*)st.tmpbuf;
-  kiss_fft_cpx* tmp2 = tmp1+MAX(nrbins, dimOther);
-  assert(tmp1 !is null);
+  kiss_fft_cpx!S* tmp1 = cast(kiss_fft_cpx!S*)st.tmpbuf;
+  kiss_fft_cpx!S* tmp2 = tmp1+MAX(nrbins, dimOther);
+  //assert(tmp1 !is null);
 
   // timedata is N0 x N1 x ... x Nk real
 
   // take a real chunk of data, fft it and place the output at correct intervals
   foreach (immutable uint k1; 0..dimOther) {
-    kiss_fftr(st.cfg_r, timedata+k1*dimReal, tmp1); // tmp1 now holds nrbins complex points
+    kiss_fftr!S(st.cfg_r, timedata+k1*dimReal, tmp1); // tmp1 now holds nrbins complex points
     foreach (immutable uint k2; 0..nrbins) tmp2[k2*dimOther+k1] = tmp1[k2];
   }
 
   foreach (immutable uint k2; 0..nrbins) {
-    kiss_fftnd(st.cfg_nd, tmp2+k2*dimOther, tmp1); // tmp1 now holds dimOther complex points
+    kiss_fftnd!S(st.cfg_nd, tmp2+k2*dimOther, tmp1); // tmp1 now holds dimOther complex points
     foreach (immutable uint k1; 0..dimOther) freqdata[k1*nrbins+k2] = tmp1[k1];
   }
 }
@@ -926,20 +1017,22 @@ public void kiss_fftndr (kiss_fftndr_cfg st, const(kiss_fft_scalar)* timedata, k
 /**
 input and output dimensions are the exact opposite of kiss_fftndr
 */
-public void kiss_fftndri (kiss_fftndr_cfg st, const(kiss_fft_cpx)* freqdata, kiss_fft_scalar* timedata) {
+public void kiss_fftndri(S) (kiss_fftndr_cfg!S st, const(kiss_fft_cpx!S)* freqdata, kiss_fft_scalar!S* timedata)
+if (is(S == float) || is(S == double) || is(S == real))
+{
   int dimReal = st.dimReal;
   int dimOther = st.dimOther;
   int nrbins = dimReal/2+1;
-  kiss_fft_cpx* tmp1 = cast(kiss_fft_cpx*)st.tmpbuf;
-  kiss_fft_cpx* tmp2 = tmp1+MAX(nrbins, dimOther);
+  kiss_fft_cpx!S* tmp1 = cast(kiss_fft_cpx!S*)st.tmpbuf;
+  kiss_fft_cpx!S* tmp2 = tmp1+MAX(nrbins, dimOther);
 
   foreach (immutable uint k2; 0..nrbins) {
     foreach (immutable uint k1; 0..dimOther) tmp1[k1] = freqdata[k1*(nrbins)+k2];
-    kiss_fftnd(st.cfg_nd, tmp1, tmp2+k2*dimOther);
+    kiss_fftnd!S(st.cfg_nd, tmp1, tmp2+k2*dimOther);
   }
 
   foreach (immutable uint k1; 0..dimOther) {
     foreach (immutable uint k2; 0..nrbins) tmp1[k2] = tmp2[k2*dimOther+k1];
-    kiss_fftri(st.cfg_r, tmp1, timedata+k1*dimReal);
+    kiss_fftri!S(st.cfg_r, tmp1, timedata+k1*dimReal);
   }
 }
