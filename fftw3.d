@@ -47,23 +47,6 @@ extern(C) nothrow @trusted @nogc:
  *
  ****************************************************************************/
 
-/* If <complex.h> is included, use the C99 complex type.  Otherwise
-   define a type bit-compatible with C99 complex */
-/*
-#if !defined(FFTW_NO_Complex) && defined(_Complex_I) && defined(complex) && defined(I)
-#  define FFTW_DEFINE_COMPLEX(R, C) typedef R _Complex C
-#else
-#  define FFTW_DEFINE_COMPLEX(R, C) typedef R C[2]
-#endif
-
-#define FFTW_CONCAT(prefix, name) prefix ## name
-#define FFTW_MANGLE_DOUBLE(name) FFTW_CONCAT(fftw_, name)
-#define FFTW_MANGLE_FLOAT(name) FFTW_CONCAT(fftwf_, name)
-#define FFTW_MANGLE_LONG_DOUBLE(name) FFTW_CONCAT(fftwl_, name)
-#define FFTW_MANGLE_QUAD(name) FFTW_CONCAT(fftwq_, name)
-*/
-
-
 alias fftw_r2r_kind_do_not_use_me = int;
 enum : int {
   FFTW_R2HC=0, FFTW_HC2R=1, FFTW_DHT=2,
@@ -86,310 +69,272 @@ struct fftw_iodim64_do_not_use_me {
 //typedef void (FFTW_CDECL *fftw_write_char_func_do_not_use_me)(char c, void *);
 //typedef int (FFTW_CDECL *fftw_read_char_func_do_not_use_me)(void *);
 
-/*
-  huge second-order macro that defines prototypes for all API
-  functions.  We expand this macro for each supported precision
 
-  X: name-mangling macro
-  R: real data type
-  C: complex data type
-*/
-enum FFTW_DEFINE_API(string X, string R, string C) = "
-/*FFTW_DEFINE_COMPLEX("~R~", "~C~");*/
-alias "~C~" = "~R~"[2];
+/*FFTW_DEFINE_COMPLEX(double, fftw_complex);*/
+alias fftw_complex = double[2];
 
 
-/*struct "~X~"plan_s *"~X~"plan;*/
-alias "~X~"plan = void*;
+/*struct fftw_plan_s *fftw_plan;*/
+alias fftw_plan = void*;
 
 /*
-typedef struct fftw_iodim_do_not_use_me "~X~"iodim;
-typedef struct fftw_iodim64_do_not_use_me "~X~"iodim64;
+typedef struct fftw_iodim_do_not_use_me fftw_iodim;
+typedef struct fftw_iodim64_do_not_use_me fftw_iodim64;
 
-typedef enum fftw_r2r_kind_do_not_use_me "~X~"r2r_kind;
+typedef enum fftw_r2r_kind_do_not_use_me fftw_r2r_kind;
 
-typedef fftw_write_char_func_do_not_use_me "~X~"write_char_func;
-typedef fftw_read_char_func_do_not_use_me "~X~"read_char_func;
+typedef fftw_write_char_func_do_not_use_me fftw_write_char_func;
+typedef fftw_read_char_func_do_not_use_me fftw_read_char_func;
 */
 
-alias "~X~"iodim = fftw_iodim_do_not_use_me;
-alias "~X~"iodim64 = fftw_iodim64_do_not_use_me;
-alias "~X~"r2r_kind = int;
+alias fftw_iodim = fftw_iodim_do_not_use_me;
+alias fftw_iodim64 = fftw_iodim64_do_not_use_me;
+alias fftw_r2r_kind = int;
 
-void "~X~"execute(const "~X~"plan p);
+void fftw_execute(const fftw_plan p);
 
-"~X~"plan "~X~"plan_dft(int rank, const int *n,
-                       "~C~" *in_, "~C~" *out_, int sign, uint flags);
+fftw_plan fftw_plan_dft(int rank, const int *n,
+                       fftw_complex *in_, fftw_complex *out_, int sign, uint flags);
 
-"~X~"plan "~X~"plan_dft_1d(int n, "~C~" *in_, "~C~" *out_, int sign,
+fftw_plan fftw_plan_dft_1d(int n, fftw_complex *in_, fftw_complex *out_, int sign,
                           uint flags);
-"~X~"plan "~X~"plan_dft_2d(int n0, int n1,
-                          "~C~" *in_, "~C~" *out_, int sign, uint flags);
-"~X~"plan "~X~"plan_dft_3d(int n0, int n1, int n2,
-                          "~C~" *in_, "~C~" *out_, int sign, uint flags);
+fftw_plan fftw_plan_dft_2d(int n0, int n1,
+                          fftw_complex *in_, fftw_complex *out_, int sign, uint flags);
+fftw_plan fftw_plan_dft_3d(int n0, int n1, int n2,
+                          fftw_complex *in_, fftw_complex *out_, int sign, uint flags);
 
-"~X~"plan "~X~"plan_many_dft(int rank, const int *n,
+fftw_plan fftw_plan_many_dft(int rank, const int *n,
                             int howmany,
-                            "~C~" *in_, const int *inembed,
+                            fftw_complex *in_, const int *inembed,
                             int istride, int idist,
-                            "~C~" *out_, const int *onembed,
+                            fftw_complex *out_, const int *onembed,
                             int ostride, int odist,
                             int sign, uint flags);
 
-"~X~"plan "~X~"plan_guru_dft(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_dft(int rank, const fftw_iodim *dims,
                             int howmany_rank,
-                            const "~X~"iodim *howmany_dims,
-                            "~C~" *in_, "~C~" *out_,
+                            const fftw_iodim *howmany_dims,
+                            fftw_complex *in_, fftw_complex *out_,
                             int sign, uint flags);
-"~X~"plan "~X~"plan_guru_split_dft(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_split_dft(int rank, const fftw_iodim *dims,
                                   int howmany_rank,
-                                  const "~X~"iodim *howmany_dims,
-                                  "~R~" *ri, "~R~" *ii, "~R~" *ro, "~R~" *io,
+                                  const fftw_iodim *howmany_dims,
+                                  double *ri, double *ii, double *ro, double *io,
                                   uint flags);
 
-"~X~"plan "~X~"plan_guru64_dft(int rank,
-                              const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_dft(int rank,
+                              const fftw_iodim64 *dims,
                               int howmany_rank,
-                              const "~X~"iodim64 *howmany_dims,
-                              "~C~" *in_, "~C~" *out_,
+                              const fftw_iodim64 *howmany_dims,
+                              fftw_complex *in_, fftw_complex *out_,
                               int sign, uint flags);
-"~X~"plan "~X~"plan_guru64_split_dft(int rank,
-                                    const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_split_dft(int rank,
+                                    const fftw_iodim64 *dims,
                                     int howmany_rank,
-                                    const "~X~"iodim64 *howmany_dims,
-                                    "~R~" *ri, "~R~" *ii, "~R~" *ro, "~R~" *io,
+                                    const fftw_iodim64 *howmany_dims,
+                                    double *ri, double *ii, double *ro, double *io,
                                     uint flags);
 
-void "~X~"execute_dft(const "~X~"plan p, "~C~" *in_, "~C~" *out_);
+void fftw_execute_dft(const fftw_plan p, fftw_complex *in_, fftw_complex *out_);
 
-void "~X~"execute_split_dft(const "~X~"plan p, "~R~" *ri, "~R~" *ii,
-                                      "~R~" *ro, "~R~" *io);
+void fftw_execute_split_dft(const fftw_plan p, double *ri, double *ii,
+                                      double *ro, double *io);
 
-"~X~"plan "~X~"plan_many_dft_r2c(int rank, const int *n,
+fftw_plan fftw_plan_many_dft_r2c(int rank, const int *n,
                                 int howmany,
-                                "~R~" *in_, const int *inembed,
+                                double *in_, const int *inembed,
                                 int istride, int idist,
-                                "~C~" *out_, const int *onembed,
+                                fftw_complex *out_, const int *onembed,
                                 int ostride, int odist,
                                 uint flags);
 
-"~X~"plan "~X~"plan_dft_r2c(int rank, const int *n,
-                           "~R~" *in_, "~C~" *out_, uint flags);
+fftw_plan fftw_plan_dft_r2c(int rank, const int *n,
+                           double *in_, fftw_complex *out_, uint flags);
 
-"~X~"plan "~X~"plan_dft_r2c_1d(int n,"~R~" *in_,"~C~" *out_,uint flags);
+fftw_plan fftw_plan_dft_r2c_1d(int n,double *in_,fftw_complex *out_,uint flags);
 
-"~X~"plan "~X~"plan_dft_r2c_2d(int n0, int n1,
-                              "~R~" *in_, "~C~" *out_, uint flags);
+fftw_plan fftw_plan_dft_r2c_2d(int n0, int n1,
+                              double *in_, fftw_complex *out_, uint flags);
 
-"~X~"plan "~X~"plan_dft_r2c_3d(int n0, int n1,
+fftw_plan fftw_plan_dft_r2c_3d(int n0, int n1,
                               int n2,
-                              "~R~" *in_, "~C~" *out_, uint flags);
+                              double *in_, fftw_complex *out_, uint flags);
 
-"~X~"plan "~X~"plan_many_dft_c2r(int rank, const int *n,
+fftw_plan fftw_plan_many_dft_c2r(int rank, const int *n,
                                 int howmany,
-                                "~C~" *in_, const int *inembed,
+                                fftw_complex *in_, const int *inembed,
                                 int istride, int idist,
-                                "~R~" *out_, const int *onembed,
+                                double *out_, const int *onembed,
                                 int ostride, int odist,
                                 uint flags);
 
-"~X~"plan "~X~"plan_dft_c2r(int rank, const int *n,
-                           "~C~" *in_, "~R~" *out_, uint flags);
+fftw_plan fftw_plan_dft_c2r(int rank, const int *n,
+                           fftw_complex *in_, double *out_, uint flags);
 
-"~X~"plan "~X~"plan_dft_c2r_1d(int n,"~C~" *in_,"~R~" *out_,uint flags);
+fftw_plan fftw_plan_dft_c2r_1d(int n,fftw_complex *in_,double *out_,uint flags);
 
-"~X~"plan "~X~"plan_dft_c2r_2d(int n0, int n1,
-                              "~C~" *in_, "~R~" *out_, uint flags);
+fftw_plan fftw_plan_dft_c2r_2d(int n0, int n1,
+                              fftw_complex *in_, double *out_, uint flags);
 
-"~X~"plan "~X~"plan_dft_c2r_3d(int n0, int n1,
+fftw_plan fftw_plan_dft_c2r_3d(int n0, int n1,
                               int n2,
-                              "~C~" *in_, "~R~" *out_, uint flags);
+                              fftw_complex *in_, double *out_, uint flags);
 
-"~X~"plan "~X~"plan_guru_dft_r2c(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_dft_r2c(int rank, const fftw_iodim *dims,
                                 int howmany_rank,
-                                const "~X~"iodim *howmany_dims,
-                                "~R~" *in_, "~C~" *out_,
+                                const fftw_iodim *howmany_dims,
+                                double *in_, fftw_complex *out_,
                                 uint flags);
 
-"~X~"plan "~X~"plan_guru_dft_c2r(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_dft_c2r(int rank, const fftw_iodim *dims,
                                 int howmany_rank,
-                                const "~X~"iodim *howmany_dims,
-                                "~C~" *in_, "~R~" *out_,
+                                const fftw_iodim *howmany_dims,
+                                fftw_complex *in_, double *out_,
                                 uint flags);
 
-"~X~"plan "~X~"plan_guru_split_dft_r2c(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_split_dft_r2c(int rank, const fftw_iodim *dims,
                                       int howmany_rank,
-                                      const "~X~"iodim *howmany_dims,
-                                      "~R~" *in_, "~R~" *ro, "~R~" *io,
+                                      const fftw_iodim *howmany_dims,
+                                      double *in_, double *ro, double *io,
                                       uint flags);
 
-"~X~"plan "~X~"plan_guru_split_dft_c2r(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_split_dft_c2r(int rank, const fftw_iodim *dims,
                                       int howmany_rank,
-                                      const "~X~"iodim *howmany_dims,
-                                      "~R~" *ri, "~R~" *ii, "~R~" *out_,
+                                      const fftw_iodim *howmany_dims,
+                                      double *ri, double *ii, double *out_,
                                       uint flags);
 
-"~X~"plan "~X~"plan_guru64_dft_r2c(int rank,
-                                  const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_dft_r2c(int rank,
+                                  const fftw_iodim64 *dims,
                                   int howmany_rank,
-                                  const "~X~"iodim64 *howmany_dims,
-                                  "~R~" *in_, "~C~" *out_,
+                                  const fftw_iodim64 *howmany_dims,
+                                  double *in_, fftw_complex *out_,
                                   uint flags);
 
-"~X~"plan "~X~"plan_guru64_dft_c2r(int rank,
-                                  const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_dft_c2r(int rank,
+                                  const fftw_iodim64 *dims,
                                   int howmany_rank,
-                                  const "~X~"iodim64 *howmany_dims,
-                                  "~C~" *in_, "~R~" *out_,
+                                  const fftw_iodim64 *howmany_dims,
+                                  fftw_complex *in_, double *out_,
                                   uint flags);
 
-"~X~"plan "~X~"plan_guru64_split_dft_r2c(int rank, const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_split_dft_r2c(int rank, const fftw_iodim64 *dims,
                                         int howmany_rank,
-                                        const "~X~"iodim64 *howmany_dims,
-                                        "~R~" *in_, "~R~" *ro, "~R~" *io,
+                                        const fftw_iodim64 *howmany_dims,
+                                        double *in_, double *ro, double *io,
                                         uint flags);
-"~X~"plan "~X~"plan_guru64_split_dft_c2r(int rank, const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_split_dft_c2r(int rank, const fftw_iodim64 *dims,
                                         int howmany_rank,
-                                        const "~X~"iodim64 *howmany_dims,
-                                        "~R~" *ri, "~R~" *ii, "~R~" *out_,
+                                        const fftw_iodim64 *howmany_dims,
+                                        double *ri, double *ii, double *out_,
                                         uint flags);
 
-void "~X~"execute_dft_r2c(const "~X~"plan p, "~R~" *in_, "~C~" *out_);
+void fftw_execute_dft_r2c(const fftw_plan p, double *in_, fftw_complex *out_);
 
-void "~X~"execute_dft_c2r(const "~X~"plan p, "~C~" *in_, "~R~" *out_);
+void fftw_execute_dft_c2r(const fftw_plan p, fftw_complex *in_, double *out_);
 
-void "~X~"execute_split_dft_r2c(const "~X~"plan p,
-                                    "~R~" *in_, "~R~" *ro, "~R~" *io);
+void fftw_execute_split_dft_r2c(const fftw_plan p,
+                                    double *in_, double *ro, double *io);
 
-void "~X~"execute_split_dft_c2r(const "~X~"plan p,
-                                    "~R~" *ri, "~R~" *ii, "~R~" *out_);
+void fftw_execute_split_dft_c2r(const fftw_plan p,
+                                    double *ri, double *ii, double *out_);
 
-"~X~"plan "~X~"plan_many_r2r(int rank, const int *n,
+fftw_plan fftw_plan_many_r2r(int rank, const int *n,
                             int howmany,
-                            "~R~" *in_, const int *inembed,
+                            double *in_, const int *inembed,
                             int istride, int idist,
-                            "~R~" *out_, const int *onembed,
+                            double *out_, const int *onembed,
                             int ostride, int odist,
-                            const "~X~"r2r_kind *kind, uint flags);
+                            const fftw_r2r_kind *kind, uint flags);
 
-"~X~"plan "~X~"plan_r2r(int rank, const int *n, "~R~" *in_, "~R~" *out_,
-                       const "~X~"r2r_kind *kind, uint flags);
+fftw_plan fftw_plan_r2r(int rank, const int *n, double *in_, double *out_,
+                       const fftw_r2r_kind *kind, uint flags);
 
-"~X~"plan "~X~"plan_r2r_1d(int n, "~R~" *in_, "~R~" *out_,
-                          "~X~"r2r_kind kind, uint flags);
+fftw_plan fftw_plan_r2r_1d(int n, double *in_, double *out_,
+                          fftw_r2r_kind kind, uint flags);
 
-"~X~"plan "~X~"plan_r2r_2d(int n0, int n1, "~R~" *in_, "~R~" *out_,
-                          "~X~"r2r_kind kind0, "~X~"r2r_kind kind1,
+fftw_plan fftw_plan_r2r_2d(int n0, int n1, double *in_, double *out_,
+                          fftw_r2r_kind kind0, fftw_r2r_kind kind1,
                           uint flags);
 
-"~X~"plan "~X~"plan_r2r_3d(int n0, int n1, int n2,
-                          "~R~" *in_, "~R~" *out_, "~X~"r2r_kind kind0,
-                          "~X~"r2r_kind kind1, "~X~"r2r_kind kind2,
+fftw_plan fftw_plan_r2r_3d(int n0, int n1, int n2,
+                          double *in_, double *out_, fftw_r2r_kind kind0,
+                          fftw_r2r_kind kind1, fftw_r2r_kind kind2,
                           uint flags);
 
-"~X~"plan "~X~"plan_guru_r2r(int rank, const "~X~"iodim *dims,
+fftw_plan fftw_plan_guru_r2r(int rank, const fftw_iodim *dims,
                             int howmany_rank,
-                            const "~X~"iodim *howmany_dims,
-                            "~R~" *in_, "~R~" *out_,
-                            const "~X~"r2r_kind *kind, uint flags);
+                            const fftw_iodim *howmany_dims,
+                            double *in_, double *out_,
+                            const fftw_r2r_kind *kind, uint flags);
 
-"~X~"plan "~X~"plan_guru64_r2r(int rank, const "~X~"iodim64 *dims,
+fftw_plan fftw_plan_guru64_r2r(int rank, const fftw_iodim64 *dims,
                               int howmany_rank,
-                              const "~X~"iodim64 *howmany_dims,
-                              "~R~" *in_, "~R~" *out_,
-                              const "~X~"r2r_kind *kind, uint flags);
+                              const fftw_iodim64 *howmany_dims,
+                              double *in_, double *out_,
+                              const fftw_r2r_kind *kind, uint flags);
 
-void "~X~"execute_r2r(const "~X~"plan p, "~R~" *in_, "~R~" *out_);
+void fftw_execute_r2r(const fftw_plan p, double *in_, double *out_);
 
-void "~X~"destroy_plan("~X~"plan p);
+void fftw_destroy_plan(fftw_plan p);
 
-void "~X~"forget_wisdom();
-void "~X~"cleanup();
+void fftw_forget_wisdom();
+void fftw_cleanup();
 
-void "~X~"set_timelimit(double t);
+void fftw_set_timelimit(double t);
 
-void "~X~"plan_with_nthreads(int nthreads);
+void fftw_plan_with_nthreads(int nthreads);
 
-int "~X~"init_threads();
+int fftw_init_threads();
 
-void "~X~"cleanup_threads();
+void fftw_cleanup_threads();
 
-void "~X~"make_planner_thread_safe();
+void fftw_make_planner_thread_safe();
 
-int "~X~"export_wisdom_to_filename(const char *filename);
+int fftw_export_wisdom_to_filename(const char *filename);
 
-/*void "~X~"export_wisdom_to_file(FILE *output_file);*/
+/*void fftw_export_wisdom_to_file(FILE *output_file);*/
 
-char * "~X~"export_wisdom_to_string();
+char * fftw_export_wisdom_to_string();
 
-/*void "~X~"export_wisdom("~X~"write_char_func write_char, void *data);*/
-int "~X~"import_system_wisdom();
+/*void fftw_export_wisdom(fftw_write_char_func write_char, void *data);*/
+int fftw_import_system_wisdom();
 
-int "~X~"import_wisdom_from_filename(const char *filename);
+int fftw_import_wisdom_from_filename(const char *filename);
 
-/*int "~X~"import_wisdom_from_file(FILE *input_file);*/
+/*int fftw_import_wisdom_from_file(FILE *input_file);*/
 
-int "~X~"import_wisdom_from_string(const char *input_string);
+int fftw_import_wisdom_from_string(const char *input_string);
 
-/*int "~X~"import_wisdom("~X~"read_char_func read_char, void *data);*/
+/*int fftw_import_wisdom(fftw_read_char_func read_char, void *data);*/
 
-/*void "~X~"fprint_plan(const "~X~"plan p, FILE *output_file);*/
+/*void fftw_fprint_plan(const fftw_plan p, FILE *output_file);*/
 
-void "~X~"print_plan(const "~X~"plan p);
+void fftw_print_plan(const fftw_plan p);
 
-char * "~X~"sprint_plan(const "~X~"plan p);
+char * fftw_sprint_plan(const fftw_plan p);
 
-void * "~X~"malloc(size_t n);
+void * fftw_malloc(size_t n);
 
-"~R~" * "~X~"alloc_real(size_t n);
-"~C~" * "~X~"alloc_complex(size_t n);
+double * fftw_alloc_real(size_t n);
+fftw_complex * fftw_alloc_complex(size_t n);
 
-void "~X~"free(void *p);
+void fftw_free(void *p);
 
-void "~X~"flops(const "~X~"plan p,
+void fftw_flops(const fftw_plan p,
                     double *add, double *mul, double *fmas);
-double "~X~"estimate_cost(const "~X~"plan p);
+double fftw_estimate_cost(const fftw_plan p);
 
-double "~X~"cost(const "~X~"plan p);
+double fftw_cost(const fftw_plan p);
 
-int "~X~"alignment_of("~R~" *p);
-
-/*
-const char "~X~"version[];
-const char "~X~"cc[];
-const char "~X~"codelet_optim[];
-*/
-";
-
-/* end of FFTW_DEFINE_API macro */
-
-mixin(FFTW_DEFINE_API!("fftw_", "double", "fftw_complex"));
-mixin(FFTW_DEFINE_API!("fftwf_", "float", "fftwf_complex"));
+int fftw_alignment_of(double *p);
 
 /*
-FFTW_DEFINE_API(FFTW_MANGLE_DOUBLE, double, fftw_complex)
-FFTW_DEFINE_API(FFTW_MANGLE_FLOAT, float, fftwf_complex)
-FFTW_DEFINE_API(FFTW_MANGLE_LONG_DOUBLE, long double, fftwl_complex)
+const char fftw_version[];
+const char fftw_cc[];
+const char fftw_codelet_optim[];
 */
 
-/+
-/* __float128 (quad precision) is a gcc extension on i386, x86_64, and ia64
-   for gcc >= 4.6 (compiled in FFTW with --enable-quad-precision) */
-#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6))
- && !(defined(__ICC) || defined(__INTEL_COMPILER) || defined(__CUDACC__) || defined(__PGI))
- && (defined(__i386__) || defined(__x86_64__) || defined(__ia64__))
-#  if !defined(FFTW_NO_Complex) && defined(_Complex_I) && defined(complex) && defined(I)
-/* note: __float128 is a typedef, which is not supported with the _Complex
-         keyword in gcc, so instead we use this ugly __attribute__ version.
-         However, we can't simply pass the __attribute__ version to
-         FFTW_DEFINE_API because the __attribute__ confuses gcc in pointer
-         types.  Hence redefining FFTW_DEFINE_COMPLEX.  Ugh. */
-#    undef FFTW_DEFINE_COMPLEX
-#    define FFTW_DEFINE_COMPLEX(R, C) typedef _Complex float __attribute__((mode(TC))) C
-#  endif
-FFTW_DEFINE_API(FFTW_MANGLE_QUAD, __float128, fftwq_complex)
-#endif
-+/
 
 enum FFTW_FORWARD = -1;
 enum FFTW_BACKWARD = 1;
