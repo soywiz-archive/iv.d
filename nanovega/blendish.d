@@ -1095,7 +1095,7 @@ private __gshared NVGImage bndIconImage;
  * A valid icon sheet is e.g. shown at
  * http://wiki.blender.org/index.php/Dev:2.5/Doc/How_to/Add_an_icon
  *
- * $(WARNING Icon sheet image should not outlive it's parent context! Use [bndClearIconImage] before context deletion.
+ * $(WARNING Icon sheet image should not outlive it's parent context! Use [bndClearIconImage] before context deletion.)
  */
 public void bndSetIconImage() (in auto ref NVGImage image) nothrow @trusted @nogc { version(aliced) pragma(inline, true); bndIconImage = image; }
 
