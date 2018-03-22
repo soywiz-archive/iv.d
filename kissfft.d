@@ -57,7 +57,7 @@ version(aliced) {} else alias usize = size_t;
 
 // ////////////////////////////////////////////////////////////////////////// //
 ///
-public enum KissFFT { Direct, Inverse }
+public enum KissFFT { Forward, Inverse }
 
 ///
 //public alias kiss_fft_scalar = float;
@@ -125,7 +125,7 @@ public template kiss_fft_cfg(T) if (is(T == float) || is(T == double) || is(T ==
 // ////////////////////////////////////////////////////////////////////////// //
 /** Initialize a FFT (or IFFT) algorithm's cfg/state buffer.
  *
- * typical usage: `kiss_fft_cfg mycfg = kiss_fft_alloc(1024, KissFFT.Direct);`
+ * typical usage: `kiss_fft_cfg mycfg = kiss_fft_alloc(1024, KissFFT.Forward);`
  *
  * The return value from fft_alloc is a cfg buffer used internally by the fft routine or `null`.
  *
