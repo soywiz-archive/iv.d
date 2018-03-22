@@ -289,7 +289,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
     You can "untransform" picking coordinates before checking with [gpuUntransformPoint].
 
     $(WARNING Picking API completely ignores clipping. If you want to check for
-              clip regions, you have to manuall register them as fill/stroke paths,
+              clip regions, you have to manually register them as fill/stroke paths,
               and perform the necessary logic. See [hitTestForId] function.)
 
   clipping =
@@ -5910,7 +5910,7 @@ public bool hitTestCurrFill (NVGContext ctx, in float x, in float y) nothrow @tr
   return (nvg__pointInBounds(x, y, pp.bounds) ? nvg__pickPath(ps, pp, x, y) : false);
 }
 
-alias isPointInPath = hitTestCurrFill; /// Ditto.
+public alias isPointInPath = hitTestCurrFill; /// Ditto.
 
 /// Returns `true` if the given point is within the stroke of the currently defined path.
 /// This operation can be done before rasterizing the current path.
