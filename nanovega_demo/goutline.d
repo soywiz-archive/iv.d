@@ -12,6 +12,65 @@ import iv.vfs.io;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+version(arsd) public class NVGWindow : SimpleWindow {
+public:
+  NVGContext nvg; // our NanoVega context
+  NVGContextFlag nvgInitFlags = NVGContextFlag.Default; // bitwise or
+
+  void delegate (NVGWindow self, NVGContext nvg) onInitOpenGL; // will be called after creating nvg
+  void delegate (NVGWindow self, NVGContext nvg) onDeinitOpenGL; // will be called before destroying nvg
+  void delegate (NVGWindow self, NVGContext nvg) onRedraw; // will be called in [redrawOpenGlScene]
+
+protected:
+  void setupCallbacks () {
+    visibleForTheFirstTime = delegate () {
+      onBeforeInitNVG();
+      nvg = nvgCreateContext(cast(NVGContextFlag)nvgInitFlags);
+      if (nvg is null) assert(0, "cannot initialize NanoVega");
+      if (onInitOpenGL !is null) onInitOpenGL(this, nvg);
+      flushGui();
+    };
+    redrawOpenGlScene = delegate () {
+      if (width < 1 || height < 1 || closed) return;
+      if (onRedraw !is null && nvg !is null) {
+        setAsCurrentOpenGlContext();
+        scope(exit) releaseCurrentOpenGlContext();
+        glViewport(0, 0, width, height);
+        onRedraw(this, nvg);
+      }
+    };
+  }
+
+  void onBeforeInitNVG () {} // you can set [nvgInitFlags] here
+
+public:
+  this (int width=800, int height=800, string title=null, Resizability resizable=Resizability.allowResizing, WindowTypes windowType=WindowTypes.normal, int customizationFlags=WindowFlags.normal, SimpleWindow parent=null) {
+    setupCallbacks();
+    super(width, height, title, OpenGlOptions.yes, resizable, windowType, customizationFlags, parent);
+  }
+
+  this (Size size, string title=null, Resizability resizable=Resizability.allowResizing) {
+    setupCallbacks();
+    super(size, title, OpenGlOptions.yes, resizable);
+  }
+
+  override void close () {
+    if (!closed && nvg !is null) {
+      setAsCurrentOpenGlContext();
+      scope(exit) { flushGui(); releaseCurrentOpenGlContext(); }
+      if (onDeinitOpenGL !is null) onDeinitOpenGL(this, nvg);
+      nvg.kill();
+    }
+    super.close();
+  }
+
+  final void forceRedraw () {
+    if (!closed && visible) redrawOpenGlSceneNow();
+  }
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
 void main () {
   NVGContext nvg; // our NanoVega context
 
