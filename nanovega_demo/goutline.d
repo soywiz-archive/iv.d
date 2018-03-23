@@ -86,20 +86,22 @@ void main () {
     nvg.createFont("verdana", "verdana");
   };
 
+  float dashStart = 0;
+
   // this callback will be called when we will need to repaint our window
   sdmain.onRedraw = delegate (self, nvg) {
     glClearColor(0, 0, 0, 0);
     glClear(glNVGClearFlags);
 
-    float[4] bounds;
-    nvg.fontFace = "verdana";
-    nvg.fontSize = 24;
-    nvg.charPathBounds('A', bounds[]);
-    writeln(bounds[]);
-
     {
       nvg.beginFrame(self.width, self.height);
       scope(exit) nvg.endFrame();
+
+      float[4] bounds;
+      nvg.fontFace = "verdana";
+      nvg.fontSize = 24;
+      nvg.charPathBounds('A', bounds[]);
+      //writeln(bounds[]);
 
       nvg.beginPath(); // start new path
       nvg.scale(0.3, 0.3);
@@ -163,6 +165,8 @@ void main () {
       nvg.fillColor = NVGColor.red;
       nvg.strokeColor = NVGColor.red;
       nvg.strokeWidth = 4;
+      nvg.lineDash = [8, 2];
+      nvg.lineDashStart = dashStart;
       nvg.stroke();
     }
   };
@@ -170,6 +174,7 @@ void main () {
   sdmain.eventLoop(0, // no pulse timer required
     delegate (KeyEvent event) {
       if (event == "*-Q" || event == "Escape") { sdmain.close(); return; } // quit on Q, Ctrl+Q, and so on
+      if (event == "D-Space") { dashStart += 0.5; sdmain.forceRedraw(); }
     },
   );
 
