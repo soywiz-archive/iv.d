@@ -1413,6 +1413,7 @@ struct NVGpathCache {
 
   void clear () nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
+    import core.stdc.string : memset;
     if (paths !is null) {
       foreach (ref p; paths[0..npaths]) p.clear();
       free(paths);
@@ -1420,7 +1421,7 @@ struct NVGpathCache {
     if (points !is null) free(points);
     if (verts !is null) free(verts);
     if (commands !is null) free(commands);
-    this = this.init;
+    memset(&this, 0, this.sizeof);
   }
 }
 
@@ -4016,7 +4017,6 @@ void nvg__tesselateBezier (NVGContext ctx, in float x1, in float y1, in float x2
   immutable float x1234 = (x123+x234)*0.5f;
   immutable float y1234 = (y123+y234)*0.5f;
 
-
   // "taxicab" / "manhattan" check for flat curves
   if (nvg__absf(x1+x3-x2-x2)+nvg__absf(y1+y3-y2-y2)+nvg__absf(x2+x4-x3-x3)+nvg__absf(y2+y4-y3-y3) < ctx.tessTol/4) {
     nvg__addPoint(ctx, x1234, y1234, type);
@@ -4364,8 +4364,8 @@ void nvg__flattenPaths (NVGContext ctx) nothrow @trusted @nogc {
     printf("flattening time: [%.*s] (%d beziers)\n", cast(uint)xb.length, xb.ptr, bzcount);
   }}
 
-  cache.bounds.ptr[0] = cache.bounds.ptr[1] = 1e6f;
-  cache.bounds.ptr[2] = cache.bounds.ptr[3] = -1e6f;
+  cache.bounds.ptr[0] = cache.bounds.ptr[1] = float.max;
+  cache.bounds.ptr[2] = cache.bounds.ptr[3] = -float.max;
 
   // calculate the direction and length of line segments
   version(nanovg_bench_flatten) timer.restart();
@@ -7237,12 +7237,12 @@ void nvg__pickBeginFrame (NVGContext ctx, int width, int height) {
 
 /// Return outline of the current path. Returned outline is not flattened.
 /// Group: paths
-public NVGPathOutline getCurrPathOutline (NVGContext context) nothrow @trusted @nogc {
-  if (context is null || !context.contextAlive || context.ncommands == 0) return NVGPathOutline.init;
+public NVGPathOutline getCurrPathOutline (NVGContext ctx) nothrow @trusted @nogc {
+  if (ctx is null || !ctx.contextAlive || ctx.ncommands == 0) return NVGPathOutline.init;
 
   auto res = NVGPathOutline.createNew();
 
-  const(float)[] acommands = context.commands[0..context.ncommands];
+  const(float)[] acommands = ctx.commands[0..ctx.ncommands];
   int ncommands = cast(int)acommands.length;
   const(float)* commands = acommands.ptr;
 
@@ -7767,6 +7767,8 @@ public:
 
   // Returns "flattened" path, transformed by the given matrix. Flattened path consists of only two commands kinds: MoveTo and LineTo.
   private NVGPathOutline flattenInternal (scope NVGMatrix* tfm) const {
+    import core.stdc.string : memset;
+
     NVGPathOutline res;
     if (dsaddr == 0 || ds.ccount == 0) { res = this; return res; } // nothing to do
 
@@ -7782,13 +7784,45 @@ public:
       if (!dowork) { res = this; return res; } // nothing to do
     }
 
+    NVGcontextinternal ctx;
+    memset(&ctx, 0, ctx.sizeof);
+    ctx.cache = nvg__allocPathCache();
+    scope(exit) {
+      import core.stdc.stdlib : free;
+      nvg__deletePathCache(ctx.cache);
+    }
+
+    ctx.tessTol = 0.25f;
+    ctx.angleTol = 0; // 0 -- angle tolerance for McSeem Bezier rasterizer
+    ctx.cuspLimit = 0; // 0 -- cusp limit for McSeem Bezier rasterizer (0: real cusps)
+    ctx.distTol = 0.01f;
+    ctx.tesselatortype = NVGTesselation.DeCasteljau;
+
+    nvg__addPath(&ctx); // we need this for `nvg__addPoint()`
+
     // has some curves or transformations, convert path
     res = createNew();
+    float[8] args = void;
+
     res.ds.bounds = [float.max, float.max, -float.max, -float.max];
 
+    float lastX = float.max, lastY = float.max;
+    bool lastWasMove = false;
+
     void addPoint (float x, float y, Command.Kind cmd=Command.Kind.LineTo) nothrow @trusted @nogc {
-      res.ds.putCommand(cmd);
       if (tfm !is null) tfm.point(x, y);
+      bool isMove = (cmd == Command.Kind.MoveTo);
+      if (isMove) {
+        // moveto
+        if (lastWasMove && nvg__ptEquals(lastX, lastY, x, y, ctx.distTol)) return;
+      } else {
+        // lineto
+        if (nvg__ptEquals(lastX, lastY, x, y, ctx.distTol)) return;
+      }
+      lastWasMove = isMove;
+      lastX = x;
+      lastY = y;
+      res.ds.putCommand(cmd);
       res.ds.putArgs(x, y);
       res.ds.bounds.ptr[0] = nvg__min(res.ds.bounds.ptr[0], x);
       res.ds.bounds.ptr[1] = nvg__min(res.ds.bounds.ptr[1], y);
@@ -7798,41 +7832,16 @@ public:
 
     // sorry for this pasta
     void flattenBezier (in float x1, in float y1, in float x2, in float y2, in float x3, in float y3, in float x4, in float y4, in int level) nothrow @trusted @nogc {
-      if (level > 10) return;
-
-      immutable float x12 = (x1+x2)*0.5f;
-      immutable float y12 = (y1+y2)*0.5f;
-      immutable float x23 = (x2+x3)*0.5f;
-      immutable float y23 = (y2+y3)*0.5f;
-      immutable float x34 = (x3+x4)*0.5f;
-      immutable float y34 = (y3+y4)*0.5f;
-      immutable float x123 = (x12+x23)*0.5f;
-      immutable float y123 = (y12+y23)*0.5f;
-
-      immutable float dx = x4-x1;
-      immutable float dy = y4-y1;
-      immutable float d2 = nvg__absf(((x2-x4)*dy-(y2-y4)*dx));
-      immutable float d3 = nvg__absf(((x3-x4)*dy-(y3-y4)*dx));
-
-      if ((d2+d3)*(d2+d3) < /*ctx.tessTol*/0.25f*(dx*dx+dy*dy)) {
-        addPoint(x4, y4);
-        return;
+      ctx.cache.npoints = 0;
+      if (ctx.tesselatortype == NVGTesselation.DeCasteljau) {
+        nvg__tesselateBezier(&ctx, x1, y1, x2, y2, x3, y3, x4, y4, 0, PointFlag.Corner);
+      } else if (ctx.tesselatortype == NVGTesselation.DeCasteljauMcSeem) {
+        nvg__tesselateBezierMcSeem(&ctx, x1, y1, x2, y2, x3, y3, x4, y4, 0, PointFlag.Corner);
+      } else {
+        nvg__tesselateBezierAFD(&ctx, x1, y1, x2, y2, x3, y3, x4, y4, PointFlag.Corner);
       }
-
-      immutable float x234 = (x23+x34)*0.5f;
-      immutable float y234 = (y23+y34)*0.5f;
-      immutable float x1234 = (x123+x234)*0.5f;
-      immutable float y1234 = (y123+y234)*0.5f;
-
-
-      // "taxicab" / "manhattan" check for flat curves
-      if (nvg__absf(x1+x3-x2-x2)+nvg__absf(y1+y3-y2-y2)+nvg__absf(x2+x4-x3-x3)+nvg__absf(y2+y4-y3-y3) < /*ctx.tessTol*/0.25f/4) {
-        addPoint(x1234, y1234);
-        return;
-      }
-
-      flattenBezier(x1, y1, x12, y12, x123, y123, x1234, y1234, level+1);
-      flattenBezier(x1234, y1234, x234, y234, x34, y34, x4, y4, level+1);
+      // add generated points
+      foreach (in ref pt; ctx.cache.points[0..ctx.cache.npoints]) addPoint(pt.x, pt.y);
     }
 
     void flattenQuad (in float x0, in float y0, in float cx, in float cy, in float x, in float y) {
@@ -7921,8 +7930,8 @@ public:
         return res;
       }
       void popFront () {
-        if (cleft == 0) return;
-        if (--cleft == 0) return; // don't waste time skipping last command
+        if (cleft <= 1) { cleft = 0; return; } // don't waste time skipping last command
+        --cleft;
         switch (data[cpos]) {
           case Command.Kind.MoveTo:
           case Command.Kind.LineTo:
