@@ -45,8 +45,8 @@ void main () {
         nvg.charToPath('A');
       } else {
         auto ol = nvg.charOutline('A');
-        scope(exit) ol.kill();
-        if (ol !is null) {
+        if (!ol.empty) {
+          auto xol = ol;
           foreach (const ref cmd; ol.commands) {
             assert(cmd.valid);
             final switch (cmd.code) {
@@ -54,8 +54,10 @@ void main () {
               case cmd.Kind.LineTo: nvg.lineTo(cmd.args[0], cmd.args[1]); break;
               case cmd.Kind.QuadTo: nvg.quadTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3]); break;
               case cmd.Kind.BezierTo: nvg.bezierTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5]); break;
+              case cmd.Kind.End: break; // the thing that should not be
             }
           }
+          //xol.clear();
         }
       }
       nvg.fillColor = NVGColor.red;
