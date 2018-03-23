@@ -7,6 +7,9 @@ import iv.nanovega;
 import iv.vfs.io;
 
 
+version = test_flatten;
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 void main () {
   NVGContext nvg; // our NanoVega context
@@ -42,18 +45,35 @@ void main () {
       nvg.scale(0.3, 0.3);
       nvg.translate(100, bounds[3]-bounds[1]+100);
       version(none) {
-        nvg.charToPath('A');
+        nvg.charToPath('Q');
       } else {
-        auto ol = nvg.charOutline('A');
+        auto ol = nvg.charOutline('Q');
         if (!ol.empty) {
+          version(test_flatten) {
+            writeln("curved commands: ", ol.length);
+            ol = ol.flatten;
+            writeln("flattened commands: ", ol.length);
+          }
           auto xol = ol;
           foreach (const ref cmd; ol.commands) {
             assert(cmd.valid);
             final switch (cmd.code) {
               case cmd.Kind.MoveTo: nvg.moveTo(cmd.args[0], cmd.args[1]); break;
               case cmd.Kind.LineTo: nvg.lineTo(cmd.args[0], cmd.args[1]); break;
-              case cmd.Kind.QuadTo: nvg.quadTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3]); break;
-              case cmd.Kind.BezierTo: nvg.bezierTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5]); break;
+              case cmd.Kind.QuadTo:
+                version(test_flatten) {
+                  assert(0, "wtf?!");
+                } else {
+                  nvg.quadTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3]);
+                }
+                break;
+              case cmd.Kind.BezierTo:
+                version(test_flatten) {
+                  assert(0, "wtf?!");
+                } else {
+                  nvg.bezierTo(cmd.args[0], cmd.args[1], cmd.args[2], cmd.args[3], cmd.args[4], cmd.args[5]);
+                }
+                break;
               case cmd.Kind.End: break; // the thing that should not be
             }
           }
