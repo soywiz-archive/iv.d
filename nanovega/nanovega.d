@@ -293,7 +293,7 @@ The following code illustrates the OpenGL state touched by the rendering code:
               and perform the necessary logic. See [hitTestForId] function.)
 
   clipping =
-    ## Cliping with paths
+    ## Clipping with paths
 
     If scissoring is not enough for you, you can clip rendering with arbitrary path,
     or with combination of paths. Clip region is saved by [save] and restored by
