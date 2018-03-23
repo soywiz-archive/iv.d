@@ -2,12 +2,13 @@ module nvg000;
 
 import arsd.simpledisplay;
 
-import iv.nanovega;
-//import iv.nanovega.blendish;
+version(arsd) import arsd.nanovega;
+else import iv.nanovega;
 import iv.vfs.io;
 
 
-version = test_flatten;
+//version = test_flatten;
+//version = test_path_outline;
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -47,7 +48,19 @@ void main () {
       version(none) {
         nvg.charToPath('Q');
       } else {
-        auto ol = nvg.charOutline('Q');
+        version(test_path_outline) {
+          nvg.resetTransform();
+          nvg.beginPath();
+          nvg.moveTo(10, 80);
+          nvg.quadTo(30, 60, 50, 80);
+          nvg.lineTo(60, 120);
+          nvg.lineTo(0, 0);
+          auto ol = nvg.getCurrPathOutline();
+          nvg.beginPath();
+          //nvg.strokeWidth = 1;
+        } else {
+          auto ol = nvg.charOutline('Q');
+        }
         if (!ol.empty) {
           version(test_flatten) {
             writeln("curved commands: ", ol.length);
@@ -58,9 +71,16 @@ void main () {
           foreach (const ref cmd; ol.commands) {
             assert(cmd.valid);
             final switch (cmd.code) {
-              case cmd.Kind.MoveTo: nvg.moveTo(cmd.args[0], cmd.args[1]); break;
-              case cmd.Kind.LineTo: nvg.lineTo(cmd.args[0], cmd.args[1]); break;
+              case cmd.Kind.MoveTo:
+                version(test_path_outline) writeln("MoveTo(", cmd.args[0], ", ", cmd.args[1], ")");
+                nvg.moveTo(cmd.args[0], cmd.args[1]);
+                break;
+              case cmd.Kind.LineTo:
+                version(test_path_outline) writeln("LineTo(", cmd.args[0], ", ", cmd.args[1], ")");
+                nvg.lineTo(cmd.args[0], cmd.args[1]);
+                break;
               case cmd.Kind.QuadTo:
+                version(test_path_outline) writeln("QuadTo(", cmd.args[0], ", ", cmd.args[1], ", ", cmd.args[2], ", ", cmd.args[3], ")");
                 version(test_flatten) {
                   assert(0, "wtf?!");
                 } else {
@@ -68,6 +88,7 @@ void main () {
                 }
                 break;
               case cmd.Kind.BezierTo:
+                version(test_path_outline) writeln("BezierTo(", cmd.args[0], ", ", cmd.args[1], ", ", cmd.args[2], ", ", cmd.args[3], ", ", cmd.args[4], ", ", cmd.args[5], ")");
                 version(test_flatten) {
                   assert(0, "wtf?!");
                 } else {
