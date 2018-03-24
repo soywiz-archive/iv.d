@@ -185,6 +185,16 @@ private:
       }
     }
 
+    // ensure that we have at least this number of bytes
+    void ensurePages(bool requireMem) (uint pgcount) {
+      if (pgcount >= uint.max/2/PageSize) assert(0, "PageStore: out of memory"); // 2GB is enough for everyone!
+      while (pgcount > mAllocPages) {
+        if (!allocNewPage!requireMem()) {
+          static if (!requireMem) break; else assert(0, "PageStore: out of memory");
+        }
+      }
+    }
+
     void clear () {
       import core.stdc.string : memset;
       if (mHugeRefs == 0) {
@@ -230,6 +240,21 @@ private:
       auto len = snprintf(msg, 1024, "SSArray: out of bounds access; index=%u; length=%u", idx, (psptr ? psp.xcount : 0));
       assert(0, msg[0..len]);
     })();
+  }
+
+  uint lengthInFullPages () const pure {
+    pragma(inline, true);
+    if (psptr) {
+      uint len = (cast(PageStore*)psptr).xcount;
+      return (len+ItemsPerPage-1)/ItemsPerPage;
+    } else {
+      return 0;
+    }
+  }
+
+  static uint lengthInFullPages (uint count) pure {
+    pragma(inline, true);
+    return (count+ItemsPerPage-1)/ItemsPerPage;
   }
 
 public:
@@ -279,12 +304,7 @@ public:
     return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr(idx/ItemsPerPage)))+idx%ItemsPerPage);
   }
 
-  void reserve(bool requireMem=false) (uint count) {
-    if (count == 0) return;
-    if (uint.max/2/T.sizeof < count) {
-      static if (requireMem) assert(0, "SSArray: out of memory");
-      else count = uint.max/2/T.sizeof;
-    }
+  private void ensurePS () {
     if (psptr == 0) {
       // allocate new
       import core.stdc.stdlib : malloc;
@@ -295,26 +315,36 @@ public:
       psx.rc = 1;
       psptr = cast(usize)psx;
     }
-    psp.ensureSize!requireMem(cast(uint)(T.sizeof*count));
   }
 
-  void setLength (uint count) {
+  void reserve(bool requireMem=false) (uint count) {
+    if (count == 0) return;
+    if (uint.max/2/T.sizeof < count) {
+      static if (requireMem) assert(0, "SSArray: out of memory");
+      else count = uint.max/2/T.sizeof;
+    }
+    ensurePS();
+    psp.ensureSize!requireMem(lengthInFullPages(cast(uint)(T.sizeof*count))*PageSize);
+  }
+
+  void setLength(bool doShrink=false, bool doClear=initNewElements) (uint count) {
     if (uint.max/2/T.sizeof < count) assert(0, "SSArray: out of memory");
-    if (count == 0) { if (psptr) (cast(PageStore*)psptr).clear(); return; }
     if (count == length) return;
-    uint newPageCount = (count+ItemsPerPage-1)/ItemsPerPage;
+    if (count == 0) { if (psptr) (cast(PageStore*)psptr).clear(); return; }
+    uint newPageCount = lengthInFullPages(count);
     assert(newPageCount > 0);
-    reserve!true(1); // ensure that we allocated a storage
+    ensurePS();
     if (count < (cast(PageStore*)psptr).xcount) {
       // shrink
-      while ((cast(PageStore*)psptr).allocedPages > newPageCount) (cast(PageStore*)psptr).freeLastPage();
+      static if (doShrink) {
+        while ((cast(PageStore*)psptr).allocedPages > newPageCount) (cast(PageStore*)psptr).freeLastPage();
+      }
       (cast(PageStore*)psptr).xcount = count;
     } else {
       // grow
-      debug(debug_ssarray) if (psptr) { import core.stdc.stdio; printf("%p: grow000: ap=%u; sz=%u; qsz=%u\n", &this, (cast(PageStore*)psptr).allocedPages, (cast(PageStore*)psptr).allocedPages*PageSize, count*T.sizeof); }
-      reserve!true(count); // ensure that we allocated a storage
-      assert((cast(PageStore*)psptr).allocedPages*PageSize >= count*T.sizeof);
-      static if (initNewElements) {
+      debug(debug_ssarray) if (psptr) { import core.stdc.stdio; printf("%p: grow000: ap=%u; sz=%u; qsz=%u; itperpage=%u; count=%u; length=%u\n", &this, (cast(PageStore*)psptr).allocedPages, (cast(PageStore*)psptr).allocedPages*PageSize, count*T.sizeof, ItemsPerPage, count, length); }
+      (cast(PageStore*)psptr).ensurePages!true(newPageCount);
+      static if (doClear) {
         static if (__traits(isIntegral, T) && T.init == 0) {
         } else {
           static immutable it = T.init;
@@ -352,6 +382,7 @@ public:
           }
           if (count == (cast(PageStore*)psptr).xcount) return;
         }
+        // fill full pages
         assert((cast(PageStore*)psptr).xcount%ItemsPerPage == 0);
         while ((cast(PageStore*)psptr).xcount < count) {
           uint ileft = count-(cast(PageStore*)psptr).xcount;
@@ -393,9 +424,12 @@ public:
     }
   }
 
+  // will not free unused items
+  void chopAll () { pragma(inline, true); if (psptr) (cast(PageStore*)psptr).xcount = 0; }
+
   void append() (in auto ref T t) {
     import core.stdc.string : memcpy;
-    setLength(length+1);
+    setLength!(false, false)(length+1); // don't clear, don't shrink
     memcpy(&this[$-1], &t, T.sizeof);
   }
 
@@ -484,9 +518,16 @@ public:
       if (lo >= hi) return Range.init;
       return Range(psptr, pos+lo, pos+hi);
     }
+
+    ref inout(T) opIndex (uint idx) inout pure {
+      version(aliced) pragma(inline, true);
+      if (psptr && idx >= 0 && idx < length) {
+        return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr((pos+idx)/ItemsPerPage)))+(pos+idx)%ItemsPerPage);
+      } else assert(0, "SSArray.Range: range error");
+    }
   }
 
-  Range opSlice () const { pragma(inline, true); return Range(this); }
+  Range opSlice () const { version(aliced) pragma(inline, true); return Range(this); }
 
   Range opSlice (uint lo, uint hi) const {
     version(aliced) pragma(inline, true);
