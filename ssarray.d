@@ -33,6 +33,7 @@ static struct SSArray(T, bool initNewElements=true) if (T.sizeof <= 4096) {
 public nothrow @trusted @nogc:
   enum PageSize = 4096;
   alias Me = SSArray!T;
+  alias ValueT = T;
 
 private:
   enum ItemsPerPage = cast(uint)(PageSize/T.sizeof); // items per one page
@@ -236,10 +237,7 @@ public:
   ~this () {
     pragma(inline, true);
     if (psptr) {
-      if (--(cast(PageStore*)psptr).rc == 0) {
-        //{ import core.stdc.stdio; printf("%p is dead\n", psp); }
-        (cast(PageStore*)psptr).clear();
-      }
+      if (--(cast(PageStore*)psptr).rc == 0) (cast(PageStore*)psptr).clear();
     }
   }
   void opAssign() (in auto ref Me src) pure {
@@ -250,6 +248,18 @@ public:
     }
     psptr = src.psptr;
   }
+
+  void clear () {
+    pragma(inline, true);
+    if (psptr) {
+      if (--(cast(PageStore*)psptr).rc == 0) (cast(PageStore*)psptr).clear();
+    }
+  }
+
+  // wraparounds
+  ref inout(T) currWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[idx%length]; }
+  ref inout(T) prevWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+length-1)%length]; }
+  ref inout(T) nextWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+1)%length]; }
 
   @property uint length () const pure { pragma(inline, true); return (psptr ? (cast(PageStore*)psptr).xcount : 0); }
   @property void length (usize count) {
@@ -372,6 +382,24 @@ public:
       }
     }
   }
+
+  // will not free unused items
+  void chop (uint size) {
+    if (length == 0) return;
+    if (size > length) {
+      (cast(PageStore*)psptr).xcount = 0;
+    } else {
+      (cast(PageStore*)psptr).xcount -= size;
+    }
+  }
+
+  void append() (in auto ref T t) {
+    import core.stdc.string : memcpy;
+    setLength(length+1);
+    memcpy(&this[$-1], &t, T.sizeof);
+  }
+
+  void opOpAssign(string op:"~") (in auto ref T t) { pragma(inline, true); append(t); }
 
   // i HAET it!
   private import std.traits : ParameterTypeTuple;
