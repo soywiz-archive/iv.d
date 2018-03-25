@@ -28,10 +28,10 @@ version(aliced) {} else private alias usize = size_t;
  *
  * $(WARNING This completely ignores any postblits and dtors!)
  */
-static struct SSArray(T, bool initNewElements=true) if (T.sizeof <= 4096) {
+static struct SSArray(T, bool initNewElements=true, uint MemPageSize=4096) if (T.sizeof <= MemPageSize) {
 //debug = debug_ssarray;
 public nothrow @trusted @nogc:
-  enum PageSize = 4096;
+  enum PageSize = MemPageSize;
   alias Me = SSArray!T;
   alias ValueT = T;
 
@@ -185,7 +185,7 @@ private:
       }
     }
 
-    // ensure that we have at least this number of bytes
+    // ensure that we have at least this number of pages
     void ensurePages(bool requireMem) (uint pgcount) {
       if (pgcount >= uint.max/2/PageSize) assert(0, "PageStore: out of memory"); // 2GB is enough for everyone!
       while (pgcount > mAllocPages) {
@@ -195,6 +195,7 @@ private:
       }
     }
 
+    // free everything
     void clear () {
       import core.stdc.string : memset;
       if (mHugeRefs == 0) {
@@ -211,6 +212,7 @@ private:
       memset(&this, 0, this.sizeof);
     }
 
+    // get pointer to the first byte of the page with the given index
     inout(ubyte)* pagePtr (uint pgidx) inout pure {
       pragma(inline, true);
       return
@@ -227,7 +229,8 @@ private:
 
   @property inout(PageStore)* psp () inout pure { pragma(inline, true); return cast(inout(PageStore*))psptr; }
 
-  void boundsError (uint idx) const pure {
+  // ugly hack, but it never returns anyway
+  static void boundsError (uint idx, uint len) pure {
     import std.traits : functionAttributes, FunctionAttribute, functionLinkage, SetFunctionAttributes, isFunctionPointer, isDelegate;
     static auto assumePure(T) (scope T t) if (isFunctionPointer!T || isDelegate!T) {
       enum attrs = functionAttributes!T|FunctionAttribute.pure_;
@@ -237,7 +240,7 @@ private:
       import core.stdc.stdlib : malloc;
       import core.stdc.stdio : snprintf;
       char* msg = cast(char*)malloc(1024);
-      auto len = snprintf(msg, 1024, "SSArray: out of bounds access; index=%u; length=%u", idx, (psptr ? psp.xcount : 0));
+      auto len = snprintf(msg, 1024, "SSArray: out of bounds access; index=%u; length=%u", idx, len);
       assert(0, msg[0..len]);
     })();
   }
@@ -259,12 +262,14 @@ private:
 
 public:
   this (this) pure { pragma(inline, true); if (psptr) ++(cast(PageStore*)psptr).rc; }
+
   ~this () {
     pragma(inline, true);
     if (psptr) {
       if (--(cast(PageStore*)psptr).rc == 0) (cast(PageStore*)psptr).clear();
     }
   }
+
   void opAssign() (in auto ref Me src) pure {
     pragma(inline, true);
     if (src.psptr) ++(cast(PageStore*)src.psptr).rc;
@@ -274,6 +279,7 @@ public:
     psptr = src.psptr;
   }
 
+  /// remove all elements, free all memory
   void clear () {
     pragma(inline, true);
     if (psptr) {
@@ -281,12 +287,13 @@ public:
     }
   }
 
-  // wraparounds
-  ref inout(T) currWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[idx%length]; }
-  ref inout(T) prevWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+length-1)%length]; }
-  ref inout(T) nextWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+1)%length]; }
+  ref inout(T) currWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[idx%length]; } /// does wraparound
+  ref inout(T) prevWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+length-1)%length]; } /// does wraparound
+  ref inout(T) nextWrap (uint idx) inout pure { pragma(inline, true); if (length == 0) assert(0, "SSArray: bounds error"); return this[(idx+1)%length]; } /// does wraparound
 
+  /// returns number of elements in the array
   @property uint length () const pure { pragma(inline, true); return (psptr ? (cast(PageStore*)psptr).xcount : 0); }
+  /// sets new number of elements in the array (will free memory on shrinking)
   @property void length (usize count) {
     pragma(inline, true);
     static if (usize.sizeof == 4) {
@@ -298,9 +305,10 @@ public:
   }
   alias opDollar = length;
 
+  ///
   ref inout(T) opIndex (uint idx) inout pure {
     pragma(inline, true);
-    if (idx >= length) boundsError(idx);
+    if (idx >= length) boundsError(idx, length);
     return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr(idx/ItemsPerPage)))+idx%ItemsPerPage);
   }
 
@@ -317,6 +325,7 @@ public:
     }
   }
 
+  /// reserve memory for the given number of elements (fail hard if `requireMem` is `true`)
   void reserve(bool requireMem=false) (uint count) {
     if (count == 0) return;
     if (uint.max/2/T.sizeof < count) {
@@ -327,7 +336,11 @@ public:
     psp.ensureSize!requireMem(lengthInFullPages(cast(uint)(T.sizeof*count))*PageSize);
   }
 
-  void setLength(bool doShrink=false, bool doClear=initNewElements) (uint count) {
+  /// set new array length.
+  /// if `doShrinkFree` is `true`, free memory on shrinking.
+  /// if `doClear` is `true`, fill new elements with `.init` on grow.
+  /// reserve memory for the given number of elements (fail hard if `requireMem` is `true`)
+  void setLength(bool doShrinkFree=false, bool doClear=initNewElements) (uint count) {
     if (uint.max/2/T.sizeof < count) assert(0, "SSArray: out of memory");
     if (count == length) return;
     if (count == 0) { if (psptr) (cast(PageStore*)psptr).clear(); return; }
@@ -336,7 +349,7 @@ public:
     ensurePS();
     if (count < (cast(PageStore*)psptr).xcount) {
       // shrink
-      static if (doShrink) {
+      static if (doShrinkFree) {
         while ((cast(PageStore*)psptr).allocedPages > newPageCount) (cast(PageStore*)psptr).freeLastPage();
       }
       (cast(PageStore*)psptr).xcount = count;
@@ -414,25 +427,30 @@ public:
     }
   }
 
-  // will not free unused items
+  /// remove `size` last elements, but don't free memory.
+  /// won't fail if `size` > `length`.
   void chop (uint size) {
-    if (length == 0) return;
-    if (size > length) {
-      (cast(PageStore*)psptr).xcount = 0;
-    } else {
-      (cast(PageStore*)psptr).xcount -= size;
+    pragma(inline, true);
+    if (psptr) {
+      if (size > length) {
+        (cast(PageStore*)psptr).xcount = 0;
+      } else {
+        (cast(PageStore*)psptr).xcount -= size;
+      }
     }
   }
 
-  // will not free unused items
+  /// remove all array elements, but don't free any memory.
   void chopAll () { pragma(inline, true); if (psptr) (cast(PageStore*)psptr).xcount = 0; }
 
+  /// append new element to the array. uses `memcpy()` to copy data.
   void append() (in auto ref T t) {
     import core.stdc.string : memcpy;
     setLength!(false, false)(length+1); // don't clear, don't shrink
     memcpy(&this[$-1], &t, T.sizeof);
   }
 
+  /// append new element to the array. uses `memcpy()` to copy data.
   void opOpAssign(string op:"~") (in auto ref T t) { pragma(inline, true); append(t); }
 
   // i HAET it!
@@ -468,7 +486,7 @@ public:
     return 0;
   }
 
-  // range iterator
+  /// range iterator
   static struct Range {
   public nothrow @trusted @nogc:
     alias ItemT = T;
@@ -505,7 +523,10 @@ public:
       version(aliced) pragma(inline, true);
       if (psptr && pos < xend && pos < (cast(PageStore*)psptr).xcount) {
         return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr(pos/ItemsPerPage)))+pos%ItemsPerPage);
-      } else assert(0, "SSArray.Range: range error");
+      } else {
+        boundsError(pos, length);
+        assert(0); // make compiler happy
+      }
     }
     void popFront () pure { pragma(inline, true); if (!empty) ++pos; }
     uint length () const pure { pragma(inline, true); return (empty ? 0 : (xend < (cast(PageStore*)psptr).xcount ? xend : (cast(PageStore*)psptr).xcount)-pos); }
@@ -514,7 +535,8 @@ public:
     Range opSlice () const { version(aliced) pragma(inline, true); return (empty ? Range.init : Range(psptr, pos, xend)); }
     Range opSlice (uint lo, uint hi) const {
       version(aliced) pragma(inline, true);
-      if (lo > length || hi > length) assert(0, "SSArray.Range: range error");
+      if (lo > length) boundsError(lo, length);
+      if (hi > length) boundsError(hi, length);
       if (lo >= hi) return Range.init;
       return Range(psptr, pos+lo, pos+hi);
     }
@@ -523,16 +545,21 @@ public:
       version(aliced) pragma(inline, true);
       if (psptr && idx >= 0 && idx < length) {
         return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr((pos+idx)/ItemsPerPage)))+(pos+idx)%ItemsPerPage);
-      } else assert(0, "SSArray.Range: range error");
+      } else {
+        boundsError(idx, length);
+        assert(0); // make compiler happy
+      }
     }
   }
 
+  ///
   Range opSlice () const { version(aliced) pragma(inline, true); return Range(this); }
 
+  ///
   Range opSlice (uint lo, uint hi) const {
     version(aliced) pragma(inline, true);
-    if (lo > length) boundsError(lo);
-    if (hi > length) boundsError(hi);
+    if (lo > length) boundsError(lo, length);
+    if (hi > length) boundsError(hi, length);
     if (lo >= hi) return Range.init;
     return Range(psptr, lo, hi);
   }
