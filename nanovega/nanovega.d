@@ -1357,6 +1357,8 @@ struct NVGstate {
   uint dashCount = 0;
   uint lastFlattenDashCount = 0;
   float dashStart = 0;
+  float totalDashLen;
+  bool firstDashIsGap = false;
   // dasher state for flattener
   bool dasherActive = false;
 
@@ -2852,6 +2854,7 @@ public void reset (NVGContext ctx) nothrow @trusted @nogc {
   state.dashCount = 0;
   state.lastFlattenDashCount = 0;
   state.dashStart = 0;
+  state.firstDashIsGap = false;
   state.dasherActive = false;
 
   ctx.params.renderResetClip(ctx.params.userPtr);
@@ -2946,14 +2949,18 @@ public void setLineDash (NVGContext ctx, const(float)[] dashdata) nothrow @trust
   NVGstate* state = nvg__getState(ctx);
   state.dashCount = 0;
   state.dashStart = 0;
+  state.firstDashIsGap = false;
   if (dashdata.length >= 2) {
+    bool curFIsGap = true; // trick
     foreach (immutable idx, float f; dashdata) {
-      if (f < 0.001) f = 0;
+      curFIsGap = !curFIsGap;
+      if (f < 0.01f) continue; // skip it
       if (idx == 0) {
         // register first dash
+        state.firstDashIsGap = curFIsGap;
         state.dashes.ptr[state.dashCount++] = f;
-      } else if (f != 0) {
-        if ((idx&1) != (state.dashCount&1)) {
+      } else {
+        if ((idx&1) != ((state.dashCount&1)^cast(uint)state.firstDashIsGap)) {
           // oops, continuation
           state.dashes[state.dashCount-1] += f;
         } else {
@@ -2970,7 +2977,14 @@ public void setLineDash (NVGContext ctx, const(float)[] dashdata) nothrow @trust
         state.dashes[state.dashCount++] = 0;
       }
     }
-    if (state.lastFlattenDashCount != 0) state.lastFlattenDashCount = uint.max; // force re-flattening
+    // calculate total dash path length
+    state.totalDashLen = 0;
+    foreach (float f; state.dashes.ptr[0..state.dashCount]) state.totalDashLen += f;
+    if (state.totalDashLen < 0.01f) {
+      state.dashCount = 0; // nothing to do
+    } else {
+      if (state.lastFlattenDashCount != 0) state.lastFlattenDashCount = uint.max; // force re-flattening
+    }
   }
 }
 
@@ -4403,6 +4417,7 @@ void nvg__dashLastPath (NVGContext ctx) nothrow @trusted @nogc {
   immutable uint dashCount = state.dashCount;
   float currDashStart = 0;
   uint currDashIdx = 0;
+  immutable bool firstIsGap = state.firstDashIsGap;
 
   // calculate lengthes
   {
@@ -4418,11 +4433,8 @@ void nvg__dashLastPath (NVGContext ctx) nothrow @trusted @nogc {
 
   void calcDashStart (float ds) {
     if (ds < 0) {
-      float plen = 0;
-      foreach (float f; dashes[0..dashCount]) plen += f;
-      //{ import core.stdc.stdio; printf("xx=%f\n", ds%plen); }
-      ds = ds%plen;
-      while (ds < 0) ds += plen; //FIXME
+      ds = ds%state.totalDashLen;
+      while (ds < 0) ds += state.totalDashLen;
     }
     currDashIdx = 0;
     currDashStart = 0;
@@ -4460,13 +4472,18 @@ void nvg__dashLastPath (NVGContext ctx) nothrow @trusted @nogc {
   }
 
   for (;;) {
-    immutable float dashRest = dashes[currDashIdx]-currDashStart;
-    if (currDashIdx&1) {
+    immutable float dlen = dashes[currDashIdx];
+    if (dlen == 0) {
+      ++currDashIdx;
+      if (currDashIdx >= dashCount) currDashIdx = 0;
+      continue;
+    }
+    immutable float dashRest = dlen-currDashStart;
+    if ((currDashIdx&1) != firstIsGap) {
       // this is "moveto" command, so create new path
       fixLastPoint();
       nvg__addPath(ctx);
     }
-    //cmd = (mCurrDash&1 ? PathCommand.MoveTo : PathCommand.LineTo);
     if (currRest > dashRest) {
       currRest -= dashRest;
       ++currDashIdx;
@@ -4479,7 +4496,7 @@ void nvg__dashLastPath (NVGContext ctx) nothrow @trusted @nogc {
       );
     } else {
       currDashStart += currRest;
-      nvg__addPoint(ctx, v2.x, v2.y, v1.flags); //???
+      nvg__addPoint(ctx, v2.x, v2.y, v1.flags); //k8:fix flags here?
       ++srcPointIdx;
       v1 = v2;
       currRest = v1.len;

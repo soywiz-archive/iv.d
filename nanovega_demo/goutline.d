@@ -165,7 +165,7 @@ void main () {
       nvg.fillColor = NVGColor.red;
       nvg.strokeColor = NVGColor.red;
       nvg.strokeWidth = 4;
-      nvg.lineDash = [8, 2];
+      nvg.lineDash = [8, 2, 4, 2];
       nvg.lineDashStart = dashStart;
       nvg.stroke();
     }
