@@ -1190,6 +1190,7 @@ public enum NVGImageFlag : uint {
   Premultiplied   = 1<<4, /// Image data has premultiplied alpha.
   NoFiltering     = 1<<8, /// use GL_NEAREST instead of GL_LINEAR
   Nearest = NoFiltering,  /// compatibility with original NanoVG
+  NoDelete        = 1<<16,/// Do not delete GL texture handle.
 }
 
 alias NVGImageFlags = NVGImageFlag; /// Backwards compatibility for [NVGImageFlag].
@@ -12190,13 +12191,6 @@ public enum NVGContextFlag : int {
 
 public enum NANOVG_GL_USE_STATE_FILTER = true;
 
-/// These are additional flags on top of [NVGImageFlag].
-/// Group: images
-public enum NVGImageFlagsGL : int {
-  NoDelete = 1<<16,  // Do not delete GL texture handle.
-}
-
-
 /// Returns flags for glClear().
 /// Group: context_management
 public uint glNVGClearFlags () pure nothrow @safe @nogc {
@@ -12480,7 +12474,7 @@ bool glnvg__deleteTexture (GLNVGcontext* gl, ref int id) nothrow @trusted @nogc 
     try { import core.thread; mytid = Thread.getThis.id; } catch (Exception e) {}
     if (gl.mainTID == mytid && gl.inFrame) {
       // can delete it right now
-      if ((tx.flags&NVGImageFlagsGL.NoDelete) == 0) glDeleteTextures(1, &tx.tex);
+      if ((tx.flags&NVGImageFlag.NoDelete) == 0) glDeleteTextures(1, &tx.tex);
       version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("*** deleted texture with id %d (%d); glid=%u\n", tx.id, id, tx.tex); }}
       memset(tx, 0, (*tx).sizeof);
       //{ import core.stdc.stdio; printf("deleting texture with id %d\n", id); }
@@ -13460,7 +13454,7 @@ void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted 
           if (tex.rc == 0 && tex.tex != 0 && tex.id == 0) {
             version(nanovega_debug_textures) {{ import core.stdc.stdio; printf("*** cleaned up texture with glid=%u\n", tex.tex); }}
             import core.stdc.string : memset;
-            if ((tex.flags&NVGImageFlagsGL.NoDelete) == 0) glDeleteTextures(1, &tex.tex);
+            if ((tex.flags&NVGImageFlag.NoDelete) == 0) glDeleteTextures(1, &tex.tex);
             memset(&tex, 0, tex.sizeof);
             tex.nextfree = gl.freetexid;
             gl.freetexid = cast(int)tidx;
@@ -14181,7 +14175,7 @@ void glnvg__renderDelete (void* uptr) nothrow @trusted @nogc {
   if (gl.vertBuf != 0) glDeleteBuffers(1, &gl.vertBuf);
 
   foreach (ref GLNVGtexture tex; gl.textures[0..gl.ntextures]) {
-    if (tex.id != 0 && (tex.flags&NVGImageFlagsGL.NoDelete) == 0) {
+    if (tex.id != 0 && (tex.flags&NVGImageFlag.NoDelete) == 0) {
       assert(tex.tex != 0);
       glDeleteTextures(1, &tex.tex);
     }
