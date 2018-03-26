@@ -19,6 +19,8 @@ module iv.ssarray /*is aliced*/;
 
 version(aliced) {} else private alias usize = size_t;
 
+//debug = debug_ssarray;
+
 
 /** Array implementation that doesn't fragment memory, and does no `realloc()`s.
  *
@@ -26,18 +28,18 @@ version(aliced) {} else private alias usize = size_t;
  * Also, there is no need to "reserve" space in `SSArray`, it won't make your
  * code faster, 'cause total number of `malloc()`s will be the same.
  *
- * $(WARNING This completely ignores any postblits and dtors!)
+ * $(WARNING This completely ignores any postblits, dtors and GC anchoring!)
  */
-static struct SSArray(T, bool initNewElements=true, uint MemPageSize=4096) if (T.sizeof <= MemPageSize) {
-//debug = debug_ssarray;
+static struct SSArray(T, bool initNewElements=true, uint MemPageSize=4096)
+if (MemPageSize > 0 && MemPageSize < uint.max/65536 && T.sizeof <= MemPageSize)
+{
 public nothrow @trusted @nogc:
   enum PageSize = MemPageSize;
+  enum ItemsPerPage = cast(uint)(PageSize/T.sizeof); // items per one page
   alias Me = SSArray!T;
   alias ValueT = T;
 
 private:
-  enum ItemsPerPage = cast(uint)(PageSize/T.sizeof); // items per one page
-
   static struct PageStore {
     enum RefsPerPage = cast(uint)(PageSize/(void*).sizeof); // page pointers per one page
   nothrow @trusted @nogc:
@@ -212,6 +214,8 @@ private:
       memset(&this, 0, this.sizeof);
     }
 
+    uint lengthInFullPages () const pure { pragma(inline, true); return (xcount+ItemsPerPage-1)/ItemsPerPage; }
+
     // get pointer to the first byte of the page with the given index
     inout(ubyte)* pagePtr (uint pgidx) inout pure {
       pragma(inline, true);
@@ -220,6 +224,18 @@ private:
         (mHugeRefs == 0 ?
           cast(inout(ubyte)*)mHugeDir[pgidx] :
           cast(inout(ubyte)*)(cast(void**)mHugeDir[pgidx/RefsPerPage])[pgidx%RefsPerPage]) :
+        null;
+    }
+
+    // get pointer to the directory entry for the given page
+    // used to move pages around
+    inout(void)** pageDirPtr (uint pgidx) inout pure {
+      pragma(inline, true);
+      return
+        pgidx < mAllocPages ?
+        (mHugeRefs == 0 ?
+          cast(inout(void)**)&mHugeDir[pgidx] :
+          cast(inout(void)**)&(cast(void**)mHugeDir[pgidx/RefsPerPage])[pgidx%RefsPerPage]) :
         null;
     }
   }
@@ -247,12 +263,7 @@ private:
 
   uint lengthInFullPages () const pure {
     pragma(inline, true);
-    if (psptr) {
-      uint len = (cast(PageStore*)psptr).xcount;
-      return (len+ItemsPerPage-1)/ItemsPerPage;
-    } else {
-      return 0;
-    }
+    return (psptr ? ((cast(PageStore*)psptr).xcount+ItemsPerPage-1)/ItemsPerPage : 0);
   }
 
   static uint lengthInFullPages (uint count) pure {
@@ -312,17 +323,19 @@ public:
     return *((cast(inout(T)*)((cast(PageStore*)psptr).pagePtr(idx/ItemsPerPage)))+idx%ItemsPerPage);
   }
 
-  private void ensurePS () {
+  private bool ensurePS(bool requireMem) () {
     if (psptr == 0) {
       // allocate new
       import core.stdc.stdlib : malloc;
       import core.stdc.string : memset;
       auto psx = cast(PageStore*)malloc(PageStore.sizeof);
-      if (psx is null) assert(0, "SSArray: out of memory"); // anyway
+      static if (!requireMem) { if (psx is null) return false; } else
+      if (psx is null) assert(0, "SSArray: out of memory");
       memset(psx, 0, PageStore.sizeof);
       psx.rc = 1;
       psptr = cast(usize)psx;
     }
+    return true;
   }
 
   /// reserve memory for the given number of elements (fail hard if `requireMem` is `true`)
@@ -332,7 +345,7 @@ public:
       static if (requireMem) assert(0, "SSArray: out of memory");
       else count = uint.max/2/T.sizeof;
     }
-    ensurePS();
+    if (!ensurePS!requireMem()) return; // this will fail if necessary
     psp.ensureSize!requireMem(lengthInFullPages(cast(uint)(T.sizeof*count))*PageSize);
   }
 
@@ -346,7 +359,7 @@ public:
     if (count == 0) { if (psptr) (cast(PageStore*)psptr).clear(); return; }
     uint newPageCount = lengthInFullPages(count);
     assert(newPageCount > 0);
-    ensurePS();
+    ensurePS!true();
     if (count < (cast(PageStore*)psptr).xcount) {
       // shrink
       static if (doShrinkFree) {
@@ -563,6 +576,87 @@ public:
     if (lo >= hi) return Range.init;
     return Range(psptr, lo, hi);
   }
+
+  // ////////////////////////////////////////////////////////////////////// //
+  // low-level thingy, which may be handy sometimes
+
+  /// get direct pointer to the page data. pointer should not outlive the array.
+  /// $(WARNING shrinking array can invalidate pointer (but not enlarging).)
+  T* pageDataPtr (uint pgidx) const pure { pragma(inline, true); return (psptr ? cast(T*)((cast(PageStore*)psptr).pagePtr(pgidx)) : null); }
+
+  /// get total number of allocated pages
+  uint allocatedPages () const pure { pragma(inline, true); return (psptr ? (cast(PageStore*)psptr).mAllocPages : 0); }
+
+  /// get number of used pages (there can be more allocated pages in the array)
+  uint usedPages () const pure { pragma(inline, true); return (psptr ? (cast(PageStore*)psptr).lengthInFullPages : 0); }
+
+  /// insert new page before the given page; returns success flag
+  /// `beforePageIdx` can be one past the last page, but not more
+  /// this won't clear inserted elements with any value
+  /// if `requireMem` is `false`, rollback on OOM
+  bool insertPageBefore(bool requireMem=true) (uint beforePageIdx) {
+    PageStore* ps = cast(PageStore*)psptr;
+    if (ps !is null) {
+      if (beforePageIdx > ps.lengthInFullPages) return false; // oops
+      // memory check
+      if (ps.lengthInFullPages >= uint.max/2/PageSize) {
+        // just can't
+        static if (requireMem) assert(0, "SSArray: out of memory");
+        else return false;
+      }
+    } else {
+      if (beforePageIdx > 0) return false; // oops
+      if (!ensurePS!requireMem()) return false; // this will fail if necessary
+      ps = cast(PageStore*)psptr;
+    }
+    // allocate new page
+    static if (!requireMem) uint oldPages = ps.mAllocPages; // for rollback
+    ps.ensurePages!requireMem(ps.lengthInFullPages+1);
+    static if (!requireMem) {
+      if (ps.mAllocPages < ps.lengthInFullPages+1) {
+        // rollback and exit
+        while (ps.mAllocPages > oldPages) ps.freeLastPage();
+        return false;
+      }
+    }
+    // easy case?
+    if (beforePageIdx != ps.lengthInFullPages) {
+      // no, move page pointers
+      auto lpp = *ps.pageDirPtr(ps.mAllocPages-1);
+      foreach_reverse (immutable uint pidx; beforePageIdx+1..ps.mAllocPages) {
+        *ps.pageDirPtr(pidx) = *ps.pageDirPtr(pidx-1);
+      }
+      *ps.pageDirPtr(beforePageIdx) = lpp;
+    }
+    // fix length
+    ps.xcount = (ps.lengthInFullPages+1)*ItemsPerPage;
+    return true;
+  }
+
+  /// remove the given page; returns success flag
+  /// if `doFreeMem` is `false`, don't free removed page, just move it into unused set
+  bool removePageAt(bool doFreeMem=true) (uint pgidx) {
+    PageStore* ps = cast(PageStore*)psptr;
+    if (ps is null) return false; // can't
+    if (pgidx >= ps.lengthInFullPages) return false; // can't
+    // easy case?
+    if (pgidx != ps.lengthInFullPages-1) {
+      // no, move page pointers
+      auto lpp = *ps.pageDirPtr(pgidx);
+      foreach (immutable uint pidx; pgidx+1..ps.mAllocPages) {
+        *ps.pageDirPtr(pidx-1) = *ps.pageDirPtr(pidx);
+      }
+      *ps.pageDirPtr(ps.mAllocPages-1) = lpp;
+    }
+    static if (doFreeMem) ps.freeLastPage();
+    if (ps.lengthInFullPages == 1) {
+      ps.xcount = 0;
+    } else {
+      uint newlen = (ps.lengthInFullPages-1)*ItemsPerPage;
+      if (ps.xcount > newlen) ps.xcount = newlen;
+    }
+    return true;
+  }
 }
 
 
@@ -598,5 +692,23 @@ version(test_ssarray) unittest {
     uint n = 0;
     foreach (immutable uint v; ssa[2..6]) n += v;
     assert(n == 2+3+4+5);
+  }
+
+  {
+    SSArray!int ssa;
+    if (!ssa.insertPageBefore(0)) assert(0, "wtf?!");
+    writefln("100: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    if (!ssa.insertPageBefore(0)) assert(0, "wtf?!");
+    writefln("101: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    if (!ssa.insertPageBefore(0)) assert(0, "wtf?!");
+    writefln("102: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    if (!ssa.removePageAt(1)) assert(0, "wtf?!");
+    writefln("103: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    if (!ssa.removePageAt(0)) assert(0, "wtf?!");
+    writefln("103: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    if (!ssa.removePageAt(0)) assert(0, "wtf?!");
+    if (ssa.psp !is null) {
+      writefln("103: ssa ptr/rc/len/allocpg: %x/%u/%u/%u  %x : %x : %x", ssa.psp, ssa.psp.rc, ssa.length, ssa.psp.mAllocPages, ssa.pageDataPtr(0), ssa.pageDataPtr(1), ssa.pageDataPtr(2));
+    }
   }
 }
