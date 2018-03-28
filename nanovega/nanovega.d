@@ -1314,7 +1314,7 @@ enum NVG_INIT_PATHS_SIZE    = 16;
 enum NVG_INIT_VERTS_SIZE    = 256;
 enum NVG_MAX_STATES         = 32;
 
-enum NVG_KAPPA90 = 0.5522847493f; // Length proportional to radius of a cubic bezier handle for 90deg arcs.
+public enum NVG_KAPPA90 = 0.5522847493f; /// Length proportional to radius of a cubic bezier handle for 90deg arcs.
 enum NVG_MIN_FEATHER = 0.001f; // it should be greater than zero, 'cause it is used in shader for divisions
 
 enum Command {
@@ -1660,7 +1660,8 @@ public auto nvg__clamp(T) (T a, T mn, T mx) { pragma(inline, true); return (a < 
 public auto nvg__sign(T) (T a) { pragma(inline, true); return (a >= cast(T)0 ? cast(T)1 : cast(T)(-1)); }
 public float nvg__cross() (float dx0, float dy0, float dx1, float dy1) { pragma(inline, true); return (dx1*dy0-dx0*dy1); }
 
-public import core.stdc.math : nvg__absf = fabsf;
+//public import core.stdc.math : nvg__absf = fabsf;
+public import core.math : nvg__absf = fabs;
 
 
 float nvg__normalize (float* x, float* y) nothrow @safe @nogc {
