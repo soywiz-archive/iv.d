@@ -2725,7 +2725,7 @@ void concmdRangeCompleter(IR, bool casesens=true) (ConCommand self, auto ref IR 
 
 // ////////////////////////////////////////////////////////////////////////// //
 /// helper function for [cmdconSetFileCompleter]
-public string[] cmdconFilesList (string pfx) nothrow {
+public string[] cmdconFilesList (string pfx, scope bool delegate (ConString name) nothrow isGood=null) nothrow {
   static bool startsWith (const(char)[] str, const(char)[] prefix) pure nothrow @trusted @nogc {
     if (prefix.length == 0) return true;
     if (prefix.length > str.length) return false;
@@ -2762,7 +2762,7 @@ public string[] cmdconFilesList (string pfx) nothrow {
       if (de.baseName[0] == '.') continue;
       try {
         if (de.isFile) {
-          if (de.name.extension == ".cbz") {
+          if (isGood is null || isGood(de.name)) {
             if (pfx.length == 0 || startsWith(de.baseName, pfx)) res ~= xxname(de.name);
           }
         } else if (de.isDir) {
@@ -2785,7 +2785,7 @@ public string[] cmdconFilesList (string pfx) nothrow {
 
 
 /// if `getCurrentFile` is not null, and sole "!" is given as argument, current file will be put
-public void cmdconSetFileCompleter (ConCommand cmd, string delegate () nothrow getCurrentFile=null) {
+public void cmdconSetFileCompleter (ConCommand cmd, string delegate () nothrow getCurrentFile=null, bool delegate (ConString name) nothrow isGood=null) {
   if (cmd is null) return;
   cmd.completer = delegate (ConCommand self) {
     auto cs = conInputBuffer[0..conInputBufferCurX];
@@ -2800,7 +2800,7 @@ public void cmdconSetFileCompleter (ConCommand cmd, string delegate () nothrow g
         return;
       }
     }
-    string[] list = cmdconFilesList(cs.idup);
+    string[] list = cmdconFilesList(cs.idup, isGood);
     if (list.length == 0) {
       conwriteln(self.name, ": no matching files");
       return;
