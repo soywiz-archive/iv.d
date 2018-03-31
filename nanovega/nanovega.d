@@ -11888,6 +11888,15 @@ public bool fonsResetAtlas (FONScontext* stash, int width, int height) nothrow @
 import core.stdc.stdlib : malloc, realloc, free;
 import core.stdc.string : memcpy, memset;
 
+static if (__VERSION__ < 2076) {
+  private auto DGNoThrowNoGC(T) (scope T t) /*if (isFunctionPointer!T || isDelegate!T)*/ {
+    import std.traits;
+    enum attrs = functionAttributes!T|FunctionAttribute.nogc|FunctionAttribute.nothrow_;
+    return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+  }
+}
+
+
 //import arsd.simpledisplay;
 version(nanovg_builtin_opengl_bindings) { import arsd.simpledisplay; } else { import iv.glbinds; }
 
@@ -12498,7 +12507,13 @@ bool glnvg__deleteTexture (GLNVGcontext* gl, ref int id) nothrow @trusted @nogc 
   if (atomicOp!"-="(tx.rc, 1) == 0) {
     import core.thread : ThreadID;
     ThreadID mytid;
-    try { import core.thread; mytid = Thread.getThis.id; } catch (Exception e) {}
+    static if (__VERSION__ < 2076) {
+      DGNoThrowNoGC(() {
+        import core.thread; mytid = Thread.getThis.id;
+      })();
+    } else {
+      try { import core.thread; mytid = Thread.getThis.id; } catch (Exception e) {}
+    }
     if (gl.mainTID == mytid && gl.inFrame) {
       // can delete it right now
       if ((tx.flags&NVGImageFlag.NoDelete) == 0) glDeleteTextures(1, &tx.tex);
@@ -13464,7 +13479,13 @@ void glnvg__renderViewport (void* uptr, int width, int height) nothrow @trusted 
   if (atomicLoad(gl.mustCleanTextures)) {
     try {
       import core.thread : Thread;
-      if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+      static if (__VERSION__ < 2076) {
+        DGNoThrowNoGC(() {
+          if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+        })();
+      } else {
+        if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+      }
       synchronized(GLNVGTextureLocker.classinfo) {
         gl.mustCleanTextures = false;
         foreach (immutable tidx, ref GLNVGtexture tex; gl.textures[0..gl.ntextures]) {
@@ -13647,7 +13668,13 @@ void glnvg__renderCancelInternal (GLNVGcontext* gl, bool clearTextures) nothrow 
   if (clearTextures && gl.inFrame) {
     try {
       import core.thread : Thread;
-      if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+      static if (__VERSION__ < 2076) {
+        DGNoThrowNoGC(() {
+          if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+        })();
+      } else {
+        if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+      }
     } catch (Exception e) {}
     foreach (ref GLNVGcall c; gl.calls[0..gl.ncalls]) if (c.image > 0) glnvg__deleteTexture(gl, c.image);
   }
@@ -13746,7 +13773,13 @@ void glnvg__renderFlush (void* uptr) nothrow @trusted @nogc {
   if (!gl.inFrame) assert(0, "NanoVega: internal driver error");
   try {
     import core.thread : Thread;
-    if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+    static if (__VERSION__ < 2076) {
+      DGNoThrowNoGC(() {
+        if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+      })();
+    } else {
+      if (gl.mainTID != Thread.getThis.id) assert(0, "NanoVega: cannot use context in alien thread");
+    }
   } catch (Exception e) {}
   scope(exit) gl.inFrame = false;
 
@@ -14279,7 +14312,11 @@ public NVGContext nvgCreateContext (const(NVGContextFlag)[] flagList...) nothrow
   ctx = createInternal(&params);
   if (ctx is null) goto error;
 
-  try { import core.thread; gl.mainTID = Thread.getThis.id; } catch (Exception e) {}
+  static if (__VERSION__ < 2076) {
+    DGNoThrowNoGC(() { import core.thread; gl.mainTID = Thread.getThis.id; })();
+  } else {
+    try { import core.thread; gl.mainTID = Thread.getThis.id; } catch (Exception e) {}
+  }
 
   return ctx;
 

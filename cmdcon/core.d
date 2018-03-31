@@ -126,43 +126,53 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 
 
 // ////////////////////////////////////////////////////////////////////////// //
+private auto assumeNoThrowNoGC(T) (scope T t) /*if (isFunctionPointer!T || isDelegate!T)*/ {
+  import std.traits;
+  enum attrs = functionAttributes!T|FunctionAttribute.nogc|FunctionAttribute.nothrow_;
+  return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+}
+
 /// multithread lock
-public void consoleLock() () nothrow @trusted {
+public void consoleLock() () nothrow @trusted @nogc {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleLocker.lock();
   } else {
-    try { consoleLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    //try { consoleLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    assumeNoThrowNoGC(() { consoleLocker.lock(); })();
   }
 }
 
 /// multithread unlock
-public void consoleUnlock() () nothrow @trusted {
+public void consoleUnlock() () nothrow @trusted @nogc {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleLocker.unlock();
   } else {
-    try { consoleLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    //try { consoleLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    assumeNoThrowNoGC(() { consoleLocker.unlock(); })();
   }
 }
 
 // multithread lock
-public void consoleWriteLock() () nothrow @trusted {
+public void consoleWriteLock() () nothrow @trusted @nogc {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleWriteLocker.lock();
   } else {
-    try { consoleWriteLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    //try { consoleWriteLocker.lock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    assumeNoThrowNoGC(() { consoleWriteLocker.lock(); })();
   }
 }
 
 // multithread unlock
-public void consoleWriteUnlock() () nothrow @trusted {
+public void consoleWriteUnlock() () nothrow @trusted @nogc {
   version(aliced) pragma(inline, true);
   version(aliced) {
     consoleWriteLocker.unlock();
   } else {
-    try { consoleWriteLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    //try { consoleWriteLocker.unlock(); } catch (Exception e) { assert(0, "fuck vanilla!"); }
+    assumeNoThrowNoGC(() { consoleWriteLocker.unlock(); })();
   }
 }
 
