@@ -2303,6 +2303,7 @@ public:
     void putUIntHex (uint n, int len) nothrow @trusted {
       char[16] buf = void;
       uint bpos = cast(uint)buf.length;
+      if (len > 16) len = 16;
       do { buf.ptr[--bpos] = cast(char)('0'+n%16+(n%16 > 9 ? 7 : 0)); } while ((n /= 16) != 0);
       while (buf.length-bpos < len) buf.ptr[--bpos] = '0';
       buf.ptr[--bpos] = '#';
@@ -2846,6 +2847,7 @@ public:
           case 7:
             putMnemo("RST");
             putUInt(opcode&0x38, 2);
+            endArg();
             break;
         }
         break;
