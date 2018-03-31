@@ -126,11 +126,14 @@ public @property uint cbufLastChange () nothrow @trusted @nogc { import core.ato
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private auto assumeNoThrowNoGC(T) (scope T t) /*if (isFunctionPointer!T || isDelegate!T)*/ {
-  import std.traits;
-  enum attrs = functionAttributes!T|FunctionAttribute.nogc|FunctionAttribute.nothrow_;
-  return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+version(aliced) {} else {
+  private auto assumeNoThrowNoGC(T) (scope T t) /*if (isFunctionPointer!T || isDelegate!T)*/ {
+    import std.traits;
+    enum attrs = functionAttributes!T|FunctionAttribute.nogc|FunctionAttribute.nothrow_;
+    return cast(SetFunctionAttributes!(T, functionLinkage!T, attrs)) t;
+  }
 }
+
 
 /// multithread lock
 public void consoleLock() () nothrow @trusted @nogc {
