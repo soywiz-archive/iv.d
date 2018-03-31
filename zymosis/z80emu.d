@@ -45,7 +45,7 @@ public:
 
 public:
   /// flag masks
-  enum Z80Flags {
+  enum Z80Flag : ubyte {
     C = 0x01, /// carry flag
     N = 0x02, /// add/substract flag (0: last was add, 1: last was sub)
     PV = 0x04, /// parity/overflow flag
@@ -309,14 +309,14 @@ final:
 
     bool doCond (ubyte code) {
       final switch (code&0x07) {
-        case 0: return (AF.f&Z80Flags.Z) == 0;
-        case 1: return (AF.f&Z80Flags.Z) != 0;
-        case 2: return (AF.f&Z80Flags.C) == 0;
-        case 3: return (AF.f&Z80Flags.C) != 0;
-        case 4: return (AF.f&Z80Flags.PV) == 0;
-        case 5: return (AF.f&Z80Flags.PV) != 0;
-        case 6: return (AF.f&Z80Flags.S) == 0;
-        case 7: return (AF.f&Z80Flags.S) != 0;
+        case 0: return (AF.f&Z80Flag.Z) == 0;
+        case 1: return (AF.f&Z80Flag.Z) != 0;
+        case 2: return (AF.f&Z80Flag.C) == 0;
+        case 3: return (AF.f&Z80Flag.C) != 0;
+        case 4: return (AF.f&Z80Flag.PV) == 0;
+        case 5: return (AF.f&Z80Flag.PV) != 0;
+        case 6: return (AF.f&Z80Flag.S) == 0;
+        case 7: return (AF.f&Z80Flag.S) != 0;
       }
       assert(0);
     }
@@ -401,9 +401,9 @@ final:
             tmpB = (tmpB+AF.a)&0xff;
             prevOpChangedFlags = true;
             AF.f = // BOO! FEAR THE MIGHTY BITS!
-              (tmpB&Z80Flags.F3)|(AF.f&(Z80Flags.C|Z80Flags.Z|Z80Flags.S))|
-              (BC != 0 ? Z80Flags.PV : 0)|
-              (tmpB&0x02 ? Z80Flags.F5 : 0);
+              (tmpB&Z80Flag.F3)|(AF.f&(Z80Flag.C|Z80Flag.Z|Z80Flag.S))|
+              (BC != 0 ? Z80Flag.PV : 0)|
+              (tmpB&0x02 ? Z80Flag.F5 : 0);
             if (isRepeated(opcode)) {
               if (BC != 0) {
                 // IOP(5)
@@ -429,17 +429,17 @@ final:
             --BC;
             prevOpChangedFlags = true;
             AF.f = // BOO! FEAR THE MIGHTY BITS!
-              Z80Flags.N|
-              (AF.f&Z80Flags.C)|
-              (BC != 0 ? Z80Flags.PV : 0)|
-              (cast(int)(AF.a&0x0f)-cast(int)(tmpB&0x0f) < 0 ? Z80Flags.H : 0);
+              Z80Flag.N|
+              (AF.f&Z80Flag.C)|
+              (BC != 0 ? Z80Flag.PV : 0)|
+              (cast(int)(AF.a&0x0f)-cast(int)(tmpB&0x0f) < 0 ? Z80Flag.H : 0);
             tmpB = (cast(int)AF.a-cast(int)tmpB)&0xff;
-            AF.f |= (tmpB == 0 ? Z80Flags.Z : 0)|(tmpB&Z80Flags.S);
-            if (AF.f&Z80Flags.H) tmpB = (cast(ushort)tmpB-1)&0xff;
-            AF.f |= (tmpB&Z80Flags.F3)|(tmpB&0x02 ? Z80Flags.F5 : 0);
+            AF.f |= (tmpB == 0 ? Z80Flag.Z : 0)|(tmpB&Z80Flag.S);
+            if (AF.f&Z80Flag.H) tmpB = (cast(ushort)tmpB-1)&0xff;
+            AF.f |= (tmpB&Z80Flag.F3)|(tmpB&0x02 ? Z80Flag.F5 : 0);
             if (isRepeated(opcode)) {
               // repeated
-              if ((AF.f&(Z80Flags.Z|Z80Flags.PV)) == Z80Flags.PV) {
+              if ((AF.f&(Z80Flag.Z|Z80Flag.PV)) == Z80Flag.PV) {
                 // IOP(5)
                 contention_by1ts(HL, 5);
                 // do it again
@@ -473,8 +473,8 @@ final:
             }
             prevOpChangedFlags = true;
             AF.f =
-              (tmpB&0x80 ? Z80Flags.N : 0)|
-              (tmpC < tmpB ? Z80Flags.H|Z80Flags.C : 0)|
+              (tmpB&0x80 ? Z80Flag.N : 0)|
+              (tmpC < tmpB ? Z80Flag.H|Z80Flag.C : 0)|
               tblParity.ptr[(tmpC&0x07)^BC.b]|
               tblSZ53.ptr[BC.b];
             if (isRepeated(opcode)) {
@@ -499,7 +499,7 @@ final:
                   MEMPTR = cast(ushort)(BC+1);
                   tmpB = port_read(BC);
                   prevOpChangedFlags = true;
-                  AF.f = tblSZP53.ptr[tmpB]|(AF.f&Z80Flags.C);
+                  AF.f = tblSZP53.ptr[tmpB]|(AF.f&Z80Flag.C);
                   final switch ((opcode>>3)&0x07) {
                     case 0: BC.b = tmpB; break;
                     case 1: BC.c = tmpB; break;
@@ -884,7 +884,7 @@ final:
                 case 5: // CPL
                   AF.a ^= 0xff;
                   prevOpChangedFlags = true;
-                  AF.f = (AF.a&Z80Flags.F35)|(Z80Flags.N|Z80Flags.H)|(AF.f&(Z80Flags.C|Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
+                  AF.f = (AF.a&Z80Flag.F35)|(Z80Flag.N|Z80Flag.H)|(AF.f&(Z80Flag.C|Z80Flag.PV|Z80Flag.Z|Z80Flag.S));
                   break;
                 case 6: // SCF
                   version(Zymosis_Testing) {
@@ -895,7 +895,7 @@ final:
                     else
                       ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
                   }
-                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35)|Z80Flags.C;
+                  AF.f = (AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S))|((AF.a|fff)&Z80Flag.F35)|Z80Flag.C;
                   prevOpChangedFlags = true;
                   break;
                 case 7: // CCF
@@ -907,9 +907,9 @@ final:
                     else
                       ubyte fff = (prevOpChangedFlagsXX ? 0 : AF.f);
                   }
-                  tmpB = AF.f&Z80Flags.C;
-                  AF.f = (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|((AF.a|fff)&Z80Flags.F35);
-                  AF.f |= tmpB ? Z80Flags.H : Z80Flags.C;
+                  tmpB = AF.f&Z80Flag.C;
+                  AF.f = (AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S))|((AF.a|fff)&Z80Flag.F35);
+                  AF.f |= tmpB ? Z80Flag.H : Z80Flag.C;
                   prevOpChangedFlags = true;
                   break;
                 /* SCF/CCF:
@@ -1182,7 +1182,7 @@ final:
   int intr () {
     int ots = tstates;
     prevOpChangedFlags = false;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } // Z80 bug, NMOS only
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~(Z80Flag.PV); } // Z80 bug, NMOS only
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; // not accepted
     if (halted) { halted = false; ++PC; }
     IFF1 = IFF2 = false; // disable interrupts
@@ -1236,7 +1236,7 @@ final:
   int nmi () {
     int ots = tstates;
     prevOpChangedFlags = false;
-    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~Z80Flags.PV; } // emulate Z80 bug with interrupted LD A,I/R, NMOS only
+    if (prevWasEIDDR == EIDDR.LdIorR) { prevWasEIDDR = EIDDR.Normal; AF.f &= ~(Z80Flag.PV); } // emulate Z80 bug with interrupted LD A,I/R, NMOS only
     if (prevWasEIDDR == EIDDR.BlockInt || !IFF1) return 0; // not accepted
     /*prevWasEIDDR = EIDDR.Normal;*/ // don't care
     if (halted) { halted = false; ++PC; }
@@ -1518,37 +1518,37 @@ protected nothrow @trusted /*@nogc*/:
   void ADC_A (ubyte b) {
     pragma(inline, true);
     ushort newv, o = AF.a;
-    AF.a = (newv = cast(ushort)(o+b+(AF.f&Z80Flags.C)))&0xff; // Z80Flags.C is 0x01, so it's safe
+    AF.a = (newv = cast(ushort)(o+b+(AF.f&Z80Flag.C)))&0xff; // Z80Flag.C is 0x01, so it's safe
     prevOpChangedFlags = true;
     AF.f =
       tblSZ53.ptr[newv&0xff]|
-      (newv > 0xff ? Z80Flags.C : 0)|
-      ((o^(~(b)))&(o^newv)&0x80 ? Z80Flags.PV : 0)|
-      ((o&0x0f)+(b&0x0f)+(AF.f&Z80Flags.C) >= 0x10 ? Z80Flags.H : 0);
+      (newv > 0xff ? Z80Flag.C : 0)|
+      ((o^(~(b)))&(o^newv)&0x80 ? Z80Flag.PV : 0)|
+      ((o&0x0f)+(b&0x0f)+(AF.f&Z80Flag.C) >= 0x10 ? Z80Flag.H : 0);
   }
 
   void SBC_A (ubyte b) {
     pragma(inline, true);
     ushort newv, o = AF.a;
-    AF.a = (newv = (cast(int)o-cast(int)b-cast(int)(AF.f&Z80Flags.C))&0xffff)&0xff; // Z80Flags.C is 0x01, so it's safe
+    AF.a = (newv = (cast(int)o-cast(int)b-cast(int)(AF.f&Z80Flag.C))&0xffff)&0xff; // Z80Flag.C is 0x01, so it's safe
     prevOpChangedFlags = true;
     AF.f =
-      Z80Flags.N|
+      Z80Flag.N|
       tblSZ53.ptr[newv&0xff]|
-      (newv > 0xff ? Z80Flags.C : 0)|
-      ((o^b)&(o^newv)&0x80 ? Z80Flags.PV : 0)|
-      (cast(int)(o&0x0f)-cast(int)(b&0x0f)-cast(int)(AF.f&Z80Flags.C) < 0 ? Z80Flags.H : 0);
+      (newv > 0xff ? Z80Flag.C : 0)|
+      ((o^b)&(o^newv)&0x80 ? Z80Flag.PV : 0)|
+      (cast(int)(o&0x0f)-cast(int)(b&0x0f)-cast(int)(AF.f&Z80Flag.C) < 0 ? Z80Flag.H : 0);
   }
 
   void ADD_A (ubyte b) {
     pragma(inline, true);
-    AF.f &= ~Z80Flags.C;
+    AF.f &= ~(Z80Flag.C);
     ADC_A(b);
   }
 
   void SUB_A (ubyte b) {
     pragma(inline, true);
-    AF.f &= ~Z80Flags.C;
+    AF.f &= ~(Z80Flag.C);
     SBC_A(b);
   }
 
@@ -1557,16 +1557,16 @@ protected nothrow @trusted /*@nogc*/:
     ubyte o = AF.a, newv = (cast(int)o-cast(int)b)&0xff;
     prevOpChangedFlags = true;
     AF.f =
-      Z80Flags.N|
-      (newv&Z80Flags.S)|
-      (b&Z80Flags.F35)|
-      (newv == 0 ? Z80Flags.Z : 0)|
-      (o < b ? Z80Flags.C : 0)|
-      ((o^b)&(o^newv)&0x80 ? Z80Flags.PV : 0)|
-      (cast(int)(o&0x0f)-cast(int)(b&0x0f) < 0 ? Z80Flags.H : 0);
+      Z80Flag.N|
+      (newv&Z80Flag.S)|
+      (b&Z80Flag.F35)|
+      (newv == 0 ? Z80Flag.Z : 0)|
+      (o < b ? Z80Flag.C : 0)|
+      ((o^b)&(o^newv)&0x80 ? Z80Flag.PV : 0)|
+      (cast(int)(o&0x0f)-cast(int)(b&0x0f) < 0 ? Z80Flag.H : 0);
   }
 
-  void AND_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a &= b]|Z80Flags.H; prevOpChangedFlags = true; }
+  void AND_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a &= b]|Z80Flag.H; prevOpChangedFlags = true; }
   void OR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a |= b]; prevOpChangedFlags = true; }
   void XOR_A (ubyte b) { pragma(inline, true); AF.f = tblSZP53.ptr[AF.a ^= b]; prevOpChangedFlags = true; }
 
@@ -1574,10 +1574,10 @@ protected nothrow @trusted /*@nogc*/:
   ubyte DEC8 (ubyte b) {
     pragma(inline, true);
     prevOpChangedFlags = true;
-    AF.f &= Z80Flags.C;
-    AF.f |= Z80Flags.N|
-      (b == 0x80 ? Z80Flags.PV : 0)|
-      (b&0x0f ? 0 : Z80Flags.H)|
+    AF.f &= Z80Flag.C;
+    AF.f |= Z80Flag.N|
+      (b == 0x80 ? Z80Flag.PV : 0)|
+      (b&0x0f ? 0 : Z80Flag.H)|
       tblSZ53.ptr[(cast(int)b-1)&0xff];
     return (cast(int)b-1)&0xff;
   }
@@ -1586,10 +1586,10 @@ protected nothrow @trusted /*@nogc*/:
   ubyte INC8 (ubyte b) {
     pragma(inline, true);
     prevOpChangedFlags = true;
-    AF.f &= Z80Flags.C;
+    AF.f &= Z80Flag.C;
     AF.f |=
-      (b == 0x7f ? Z80Flags.PV : 0)|
-      ((b+1)&0x0f ? 0 : Z80Flags.H )|
+      (b == 0x7f ? Z80Flag.PV : 0)|
+      ((b+1)&0x0f ? 0 : Z80Flag.H )|
       tblSZ53.ptr[(b+1)&0xff];
     return ((b+1)&0xff);
   }
@@ -1600,7 +1600,7 @@ protected nothrow @trusted /*@nogc*/:
     ubyte c = ((AF.a>>7)&0x01);
     AF.a = cast(ubyte)((AF.a<<1)|c);
     prevOpChangedFlags = true;
-    AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
+    AF.f = cast(ubyte)(c|(AF.a&Z80Flag.F35)|(AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S)));
   }
 
   // cyclic, carry reflects shifted bit
@@ -1609,33 +1609,33 @@ protected nothrow @trusted /*@nogc*/:
     ubyte c = (AF.a&0x01);
     AF.a = cast(ubyte)((AF.a>>1)|(c<<7));
     prevOpChangedFlags = true;
-    AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
+    AF.f = cast(ubyte)(c|(AF.a&Z80Flag.F35)|(AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S)));
   }
 
   // cyclic thru carry
   void RLA () {
     pragma(inline, true);
     ubyte c = ((AF.a>>7)&0x01);
-    AF.a = cast(ubyte)((AF.a<<1)|(AF.f&Z80Flags.C));
+    AF.a = cast(ubyte)((AF.a<<1)|(AF.f&Z80Flag.C));
     prevOpChangedFlags = true;
-    AF.f = cast(ubyte)(c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S)));
+    AF.f = cast(ubyte)(c|(AF.a&Z80Flag.F35)|(AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S)));
   }
 
   // cyclic thru carry
   void RRA () {
     pragma(inline, true);
     ubyte c = (AF.a&0x01);
-    AF.a = (AF.a>>1)|((AF.f&Z80Flags.C)<<7);
+    AF.a = (AF.a>>1)|((AF.f&Z80Flag.C)<<7);
     prevOpChangedFlags = true;
-    AF.f = c|(AF.a&Z80Flags.F35)|(AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S));
+    AF.f = c|(AF.a&Z80Flag.F35)|(AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S));
   }
 
   // cyclic thru carry
   ubyte RL (ubyte b) {
     pragma(inline, true);
-    ubyte c = (b>>7)&Z80Flags.C;
+    ubyte c = (b>>7)&Z80Flag.C;
     prevOpChangedFlags = true;
-    AF.f = tblSZP53.ptr[(b = ((b<<1)&0xff)|(AF.f&Z80Flags.C))]|c;
+    AF.f = tblSZP53.ptr[(b = ((b<<1)&0xff)|(AF.f&Z80Flag.C))]|c;
     return b;
   }
 
@@ -1643,14 +1643,14 @@ protected nothrow @trusted /*@nogc*/:
     pragma(inline, true);
     ubyte c = (b&0x01);
     prevOpChangedFlags = true;
-    AF.f = tblSZP53.ptr[(b = (b>>1)|((AF.f&Z80Flags.C)<<7))]|c;
+    AF.f = tblSZP53.ptr[(b = (b>>1)|((AF.f&Z80Flag.C)<<7))]|c;
     return b;
   }
 
   // cyclic, carry reflects shifted bit
   ubyte RLC (ubyte b) {
     pragma(inline, true);
-    ubyte c = ((b>>7)&Z80Flags.C);
+    ubyte c = ((b>>7)&Z80Flag.C);
     prevOpChangedFlags = true;
     AF.f = tblSZP53.ptr[(b = ((b<<1)&0xff)|c)]|c;
     return b;
@@ -1697,7 +1697,7 @@ protected nothrow @trusted /*@nogc*/:
     return b;
   }
 
-  static immutable ubyte[8] hct = [ 0, Z80Flags.H, Z80Flags.H, Z80Flags.H, 0, 0, 0, Z80Flags.H ];
+  static immutable ubyte[8] hct = [ 0, Z80Flag.H, Z80Flag.H, Z80Flag.H, 0, 0, 0, Z80Flag.H ];
 
   // ddvalue+value
   ushort ADD_DD (ushort value, ushort ddvalue) {
@@ -1707,9 +1707,9 @@ protected nothrow @trusted /*@nogc*/:
     MEMPTR = (ddvalue+1)&0xffff;
     prevOpChangedFlags = true;
     AF.f =
-      (AF.f&(Z80Flags.PV|Z80Flags.Z|Z80Flags.S))|
-      (res > 0xffff ? Z80Flags.C : 0)|
-      ((res>>8)&Z80Flags.F35)|
+      (AF.f&(Z80Flag.PV|Z80Flag.Z|Z80Flag.S))|
+      (res > 0xffff ? Z80Flag.C : 0)|
+      ((res>>8)&Z80Flag.F35)|
       hct.ptr[b];
     return cast(ushort)res;
   }
@@ -1717,17 +1717,17 @@ protected nothrow @trusted /*@nogc*/:
   // ddvalue+value
   ushort ADC_DD (ushort value, ushort ddvalue) {
     pragma(inline, true);
-    ubyte c = (AF.f&Z80Flags.C);
+    ubyte c = (AF.f&Z80Flag.C);
     uint newv = cast(uint)value+cast(uint)ddvalue+cast(uint)c;
     ushort res = newv&0xffff;
     MEMPTR = (ddvalue+1)&0xffff;
     prevOpChangedFlags = true;
     AF.f =
-      ((res>>8)&Z80Flags.S35)|
-      (res == 0 ? Z80Flags.Z : 0)|
-      (newv > 0xffff ? Z80Flags.C : 0)|
-      ((value^((~(ddvalue))&0xffff))&(value^newv)&0x8000 ? Z80Flags.PV : 0)|
-      ((value&0x0fff)+(ddvalue&0x0fff)+c >= 0x1000 ? Z80Flags.H : 0);
+      ((res>>8)&Z80Flag.S35)|
+      (res == 0 ? Z80Flag.Z : 0)|
+      (newv > 0xffff ? Z80Flag.C : 0)|
+      ((value^((~(ddvalue))&0xffff))&(value^newv)&0x8000 ? Z80Flag.PV : 0)|
+      ((value&0x0fff)+(ddvalue&0x0fff)+c >= 0x1000 ? Z80Flag.H : 0);
     return res;
   }
 
@@ -1743,7 +1743,7 @@ protected nothrow @trusted /*@nogc*/:
     SBC_A((value>>8)&0xff);
     res |= (AF.a<<8);
     AF.a = tmpB;
-    AF.f = (res ? AF.f&(~Z80Flags.Z) : AF.f|Z80Flags.Z);
+    AF.f = (res ? AF.f&(~(Z80Flag.Z)) : AF.f|Z80Flag.Z);
     return res;
   }
 
@@ -1751,24 +1751,24 @@ protected nothrow @trusted /*@nogc*/:
     pragma(inline, true);
     prevOpChangedFlags = true;
     AF.f =
-      Z80Flags.H|
-      (AF.f&Z80Flags.C)|
-      ((gotDD /*|| mptr*/ ? MEMPTR.h : num)&Z80Flags.F35)|
-      (num&(1<<bit) ? 0 : Z80Flags.PV|Z80Flags.Z)|
-      (num&((1<<bit)&Z80Flags.S))
-      /*(bit == 7 ? num&Z80Flags.S : 0)*/;
-    //if (mptr) AF.f = (AF.f&~Z80Flags.F35)|(MEMPTR.h&Z80Flags.F35);
+      Z80Flag.H|
+      (AF.f&Z80Flag.C)|
+      ((gotDD /*|| mptr*/ ? MEMPTR.h : num)&Z80Flag.F35)|
+      (num&(1<<bit) ? 0 : Z80Flag.PV|Z80Flag.Z)|
+      (num&((1<<bit)&Z80Flag.S))
+      /*(bit == 7 ? num&Z80Flag.S : 0)*/;
+    //if (mptr) AF.f = (AF.f&~Z80Flag.F35)|(MEMPTR.h&Z80Flag.F35);
   }
 
   void DAA () {
     //pragma(inline, true);
-    ubyte tmpI = 0, tmpC = (AF.f&Z80Flags.C), tmpA = AF.a;
-    if ((AF.f&Z80Flags.H) || (tmpA&0x0f) > 9) tmpI = 6;
+    ubyte tmpI = 0, tmpC = (AF.f&Z80Flag.C), tmpA = AF.a;
+    if ((AF.f&Z80Flag.H) || (tmpA&0x0f) > 9) tmpI = 6;
     if (tmpC != 0 || tmpA > 0x99) tmpI |= 0x60;
-    if (tmpA > 0x99) tmpC = Z80Flags.C;
-    if (AF.f&Z80Flags.N) SUB_A(tmpI); else ADD_A(tmpI);
+    if (tmpA > 0x99) tmpC = Z80Flag.C;
+    if (AF.f&Z80Flag.N) SUB_A(tmpI); else ADD_A(tmpI);
     prevOpChangedFlags = true;
-    AF.f = (AF.f&~(Z80Flags.C|Z80Flags.PV))|tmpC|tblParity.ptr[AF.a];
+    AF.f = (AF.f&~(Z80Flag.C|Z80Flag.PV))|tmpC|tblParity.ptr[AF.a];
   }
  } // //
 
@@ -1781,7 +1781,7 @@ protected nothrow @trusted /*@nogc*/:
     pokeb_3ts(HL, cast(ubyte)((AF.a<<4)|(tmpB>>4)));
     AF.a = (AF.a&0xf0)|(tmpB&0x0f);
     prevOpChangedFlags = true;
-    AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
+    AF.f = (AF.f&Z80Flag.C)|tblSZP53.ptr[AF.a];
   }
 
   void RLD_A () {
@@ -1793,7 +1793,7 @@ protected nothrow @trusted /*@nogc*/:
     pokeb_3ts(HL, cast(ubyte)((tmpB<<4)|(AF.a&0x0f)));
     AF.a = (AF.a&0xf0)|(tmpB>>4);
     prevOpChangedFlags = true;
-    AF.f = (AF.f&Z80Flags.C)|tblSZP53.ptr[AF.a];
+    AF.f = (AF.f&Z80Flag.C)|tblSZP53.ptr[AF.a];
   }
 
   void LD_A_IR (ubyte ir) {
@@ -1802,7 +1802,7 @@ protected nothrow @trusted /*@nogc*/:
     prevWasEIDDR = EIDDR.LdIorR;
     contention_by1ts_ir(1);
     prevOpChangedFlags = true;
-    AF.f = tblSZ53.ptr[AF.a]|(AF.f&Z80Flags.C)|(IFF2 ? Z80Flags.PV : 0);
+    AF.f = tblSZ53.ptr[AF.a]|(AF.f&Z80Flag.C)|(IFF2 ? Z80Flag.PV : 0);
   }
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -2863,15 +2863,15 @@ private immutable ubyte[256] tblParity = (){
   foreach (immutable f; 0..256) {
     int n, p;
     for (n = f, p = 0; n != 0; n >>= 1) p ^= n&0x01;
-    t[f] = (p ? 0 : ZymCPU.Z80Flags.PV);
+    t[f] = (p ? 0 : ZymCPU.Z80Flag.PV);
   }
   return t;
 }();
 
 private immutable ubyte[256] tblSZ53 = (){
   ubyte[256] t;
-  foreach (immutable f; 0..256) t[f] = (f&ZymCPU.Z80Flags.S35);
-  t[0] |= ZymCPU.Z80Flags.Z;
+  foreach (immutable f; 0..256) t[f] = (f&ZymCPU.Z80Flag.S35);
+  t[0] |= ZymCPU.Z80Flag.Z;
   return t;
 }();
 
@@ -2880,8 +2880,8 @@ private immutable ubyte[256] tblSZP53 = (){
   foreach (immutable f; 0..256) {
     int n, p;
     for (n = f, p = 0; n != 0; n >>= 1) p ^= n&0x01;
-    t[f] = (f&ZymCPU.Z80Flags.S35)|(p ? 0 : ZymCPU.Z80Flags.PV);
+    t[f] = (f&ZymCPU.Z80Flag.S35)|(p ? 0 : ZymCPU.Z80Flag.PV);
   }
-  t[0] |= ZymCPU.Z80Flags.Z;
+  t[0] |= ZymCPU.Z80Flag.Z;
   return t;
 }();
