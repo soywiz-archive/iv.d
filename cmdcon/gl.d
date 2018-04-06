@@ -844,6 +844,12 @@ shared static this () {
 /// process keyboard event. returns `true` if event was eaten.
 public bool glconKeyEvent (KeyEvent event) {
   import arsd.simpledisplay;
+  // ketmar's special
+  if (event.key == 269025053) {
+    if (event.pressed) concmd("r_console toggle");
+    return true;
+  }
+  // others
   if (!rConsoleVisible) {
     if (event == glconShowKey) {
       if (event.pressed) concmd("r_console 1");
