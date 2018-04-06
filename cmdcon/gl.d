@@ -833,7 +833,8 @@ version(Posix) {
   import arsd.simpledisplay : GC, XCreateGC, XFreeGC, XCopyGC, XSetClipMask, DefaultGC, DefaultScreen, None;
 }
 
-public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
+//public __gshared string glconShowKey = "M-Grave"; /// this key will be eaten
+public __gshared string glconShowKey = "F12"; /// this key will be eaten
 
 shared static this () {
   conRegVar!glconShowKey("c_togglekey", "console toggle key name");
