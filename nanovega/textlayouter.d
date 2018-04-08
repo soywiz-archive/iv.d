@@ -404,8 +404,8 @@ align(1):
     bool paraend () const { pragma(inline, true); return ((flags&Flag.ParaEnd) != 0); } ///
     void paraend (bool v) { pragma(inline, true); if (v) flags |= Flag.ParaEnd; else flags &= ~Flag.ParaEnd; } ///
     bool someend () const { pragma(inline, true); return ((flags&(Flag.ParaEnd|Flag.LineEnd)) != 0); } ///
-    bool object () const { pragma(inline, true); return ((flags&Flag.Object) != 0); } ///
-    void object (bool v) { pragma(inline, true); if (v) flags |= Flag.Object; else flags &= ~Flag.Object; } ///
+    bool obj () const { pragma(inline, true); return ((flags&Flag.Object) != 0); } ///
+    void obj (bool v) { pragma(inline, true); if (v) flags |= Flag.Object; else flags &= ~Flag.Object; } ///
     bool expander () const { pragma(inline, true); return ((flags&Flag.Expander) != 0); } ///
     void expander (bool v) { pragma(inline, true); if (v) flags |= Flag.Expander; else flags &= ~Flag.Expander; } ///
     bool hardspace () const { pragma(inline, true); return ((flags&Flag.HardSpace) != 0); } ///
@@ -434,7 +434,7 @@ align(1):
   LayLineStyle just; ///
   short paraPad; /// to not recalcuate it on each relayouting; set to -1 to recalculate ;-)
   /// returns `-1` if this is not an object
-  @property int objectIdx () const pure nothrow @safe @nogc => (propsOrig.object ? wstart : -1);
+  @property int objectIdx () const pure nothrow @safe @nogc => (propsOrig.obj ? wstart : -1);
   @property bool expander () const pure nothrow @safe @nogc => propsOrig.expander;
   @property bool hardspace () const pure nothrow @safe @nogc => propsOrig.hardspace;
 }
@@ -836,6 +836,9 @@ public:
   /// get word by it's index; return `null` if index is invalid
   LayWord* wordByIndex (uint idx) pure nothrow @trusted @nogc => (idx < wordsUsed ? words+idx : null);
 
+  /// total number of words
+  @property uint wordCount () const pure nothrow @safe @nogc => wordsUsed;
+
   /// get textual representation of the given word
   @property const(CharType)[] wordText (in ref LayWord w) const pure nothrow @trusted @nogc => (w.wstart <= w.wend ? ltext[w.wstart..w.wend] : null);
 
@@ -937,7 +940,7 @@ public:
     w.wend = 0;
     mObjects ~= obj;
     w.style = style;
-    w.propsOrig.object = true;
+    w.propsOrig.obj = true;
     w.propsOrig.spaced = obj.spaced;
     w.propsOrig.canbreak = obj.canbreak;
     w.props = w.propsOrig;

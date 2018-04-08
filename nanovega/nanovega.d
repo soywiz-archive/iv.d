@@ -908,10 +908,10 @@ private:
 public:
   ///
   this() (in auto ref NVGImage src) nothrow @trusted @nogc {
-    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p created from %p (imgid=%d)\n", &this, src, src.id); }
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; if (src.id != 0) printf("NVGImage %p created from %p (imgid=%d)\n", &this, src, src.id); }
     ctx = cast(NVGContext)src.ctx;
     id = src.id;
-    if (ctx !is null) ctx.nvg__imageIncRef(id);
+    if (id && ctx !is null) ctx.nvg__imageIncRef(id);
   }
 
   ///
@@ -919,7 +919,7 @@ public:
 
   ///
   this (this) nothrow @trusted @nogc {
-    if (ctx !is null) {
+    if (ctx !is null && id) {
       version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p postblit (imgid=%d)\n", &this, id); }
       ctx.nvg__imageIncRef(id);
     }
@@ -927,11 +927,13 @@ public:
 
   ///
   void opAssign() (in auto ref NVGImage src) nothrow @trusted @nogc {
-    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p (imgid=%d) assigned from %p (imgid=%d)\n", &this, id, &src, src.id); }
-    if (src.ctx !is null) (cast(NVGContext)src.ctx).nvg__imageIncRef(src.id);
-    if (ctx !is null) ctx.nvg__imageDecRef(id);
-    ctx = cast(NVGContext)src.ctx;
-    id = src.id;
+    if (src.id != 0 || id != 0) {
+      version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p (imgid=%d) assigned from %p (imgid=%d)\n", &this, id, &src, src.id); }
+      if (src.ctx !is null && src.id) (cast(NVGContext)src.ctx).nvg__imageIncRef(src.id);
+      if (ctx !is null && id) ctx.nvg__imageDecRef(id);
+      ctx = cast(NVGContext)src.ctx;
+      id = src.id;
+    }
   }
 
   /// Is this image valid?
@@ -3254,6 +3256,7 @@ public NVGImage createImageRGBA (NVGContext ctx, int w, int h, const(void)[] dat
   NVGImage res;
   res.id = ctx.params.renderCreateTexture(ctx.params.userPtr, NVGtexture.RGBA, w, h, imageFlags, cast(const(ubyte)*)data.ptr);
   if (res.id > 0) {
+    version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("createImageRGBA: img=%p; imgid=%d\n", &res, res.id); }
     res.ctx = ctx;
     ctx.nvg__imageIncRef(res.id, false); // don't increment driver refcount
   }
