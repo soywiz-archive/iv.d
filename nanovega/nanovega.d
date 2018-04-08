@@ -909,9 +909,11 @@ public:
   ///
   this() (in auto ref NVGImage src) nothrow @trusted @nogc {
     version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; if (src.id != 0) printf("NVGImage %p created from %p (imgid=%d)\n", &this, src, src.id); }
-    ctx = cast(NVGContext)src.ctx;
-    id = src.id;
-    if (id && ctx !is null) ctx.nvg__imageIncRef(id);
+    if (src.id > 0 && src.ctx !is null) {
+      ctx = cast(NVGContext)src.ctx;
+      id = src.id;
+      ctx.nvg__imageIncRef(id);
+    }
   }
 
   ///
@@ -919,7 +921,8 @@ public:
 
   ///
   this (this) nothrow @trusted @nogc {
-    if (ctx !is null && id) {
+    version(aliced) pragma(inline, true);
+    if (id > 0 && ctx !is null) {
       version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p postblit (imgid=%d)\n", &this, id); }
       ctx.nvg__imageIncRef(id);
     }
@@ -927,19 +930,31 @@ public:
 
   ///
   void opAssign() (in auto ref NVGImage src) nothrow @trusted @nogc {
-    if (src.id != 0 || id != 0) {
+    if (src.id <= 0 || src.ctx is null) {
+      clear();
+    } else {
       version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p (imgid=%d) assigned from %p (imgid=%d)\n", &this, id, &src, src.id); }
-      if (src.ctx !is null && src.id) (cast(NVGContext)src.ctx).nvg__imageIncRef(src.id);
-      if (ctx !is null && id) ctx.nvg__imageDecRef(id);
+      if (src.id > 0 && src.ctx !is null) (cast(NVGContext)src.ctx).nvg__imageIncRef(src.id);
+      if (id > 0 && ctx !is null) ctx.nvg__imageDecRef(id);
       ctx = cast(NVGContext)src.ctx;
       id = src.id;
     }
   }
 
+  /// Free this image.
+  void clear () nothrow @trusted @nogc {
+    if (id > 0 && ctx !is null) {
+      version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p cleared (imgid=%d)\n", &this, id); }
+      ctx.nvg__imageDecRef(id);
+    }
+    id = 0;
+    ctx = null;
+  }
+
   /// Is this image valid?
   @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (id > 0 && ctx.valid); }
 
-  /// Is this image valid?
+  /// Is the given image valid and comes from the same context?
   @property bool isSameContext (const(NVGContext) actx) const pure nothrow @safe @nogc { pragma(inline, true); return (actx !is null && ctx is actx); }
 
   /// Returns image width, or zero for invalid image.
@@ -960,16 +975,6 @@ public:
       ctx.params.renderGetTextureSize(cast(void*)ctx.params.userPtr, id, &w, &h);
     }
     return h;
-  }
-
-  /// Free this image.
-  void clear () nothrow @trusted @nogc {
-    if (ctx !is null) {
-      version(nanovega_debug_image_manager_rc) { import core.stdc.stdio; printf("NVGImage %p cleared (imgid=%d)\n", &this, id); }
-      ctx.nvg__imageDecRef(id);
-      ctx = null;
-      id = 0;
-    }
   }
 }
 
@@ -1557,6 +1562,12 @@ private:
   bool contextAlive; // context can be dead, but still contain some images
 
   @disable this (this); // no copies
+
+  // debug feature
+  public @property int getImageCount () nothrow @trusted @nogc {
+    import core.atomic;
+    return atomicLoad(imageCount);
+  }
 }
 
 /** Returns number of tesselated pathes in context.
