@@ -171,7 +171,7 @@ uint tox_version_minor() @nogc;
  * The patch or revision number. Incremented when bugfixes are applied without
  * changing any functionality or API or ABI.
  */
-enum TOX_VERSION_PATCH = 0;
+enum TOX_VERSION_PATCH = 1;
 uint tox_version_patch() @nogc;
 
 /**
@@ -182,18 +182,18 @@ uint tox_version_patch() @nogc;
  */
 bool TOX_VERSION_IS_API_COMPATIBLE(int MAJOR, int MINOR, int PATCH) pure nothrow @safe @nogc {
   return
-    (TOX_VERSION_MAJOR > 0 && TOX_VERSION_MAJOR == MAJOR) && (
+    ((TOX_VERSION_MAJOR > 0 && TOX_VERSION_MAJOR == MAJOR) && (
       /* 1.x.x, 2.x.x, etc. with matching major version. */
       TOX_VERSION_MINOR > MINOR ||
       TOX_VERSION_MINOR == MINOR && TOX_VERSION_PATCH >= PATCH
-    ) || (TOX_VERSION_MAJOR == 0 && MAJOR == 0) && (
+    )) || ((TOX_VERSION_MAJOR == 0 && MAJOR == 0) && (
       /* 0.x.x makes minor behave like major above. */
       (TOX_VERSION_MINOR > 0 && TOX_VERSION_MINOR == MINOR) && (
         TOX_VERSION_PATCH >= PATCH
-      ) || (TOX_VERSION_MINOR == 0 && MINOR == 0) && (
+      )) || ((TOX_VERSION_MINOR == 0 && MINOR == 0) && (
         /* 0.0.x and 0.0.y are only compatible if x == y. */
         TOX_VERSION_PATCH == PATCH
-      )
+      ))
     );
 }
 
@@ -253,32 +253,42 @@ uint tox_address_size() @nogc;
 
 /**
  * Maximum length of a nickname in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_NAME_LENGTH = 128;
+deprecated enum TOX_MAX_NAME_LENGTH = 128;
 uint tox_max_name_length() @nogc;
 
 /**
  * Maximum length of a status message in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_STATUS_MESSAGE_LENGTH = 1007;
+deprecated enum TOX_MAX_STATUS_MESSAGE_LENGTH = 1007;
 uint tox_max_status_message_length() @nogc;
 
 /**
  * Maximum length of a friend request message in bytes.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_FRIEND_REQUEST_LENGTH = 1016;
+deprecated enum TOX_MAX_FRIEND_REQUEST_LENGTH = 1016;
 uint tox_max_friend_request_length() @nogc;
 
 /**
  * Maximum length of a single message after which it should be split.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_MESSAGE_LENGTH = 1372;
+deprecated enum TOX_MAX_MESSAGE_LENGTH = 1372;
 uint tox_max_message_length() @nogc;
 
 /**
  * Maximum size of custom packets. TODO(iphydf): should be LENGTH?
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_CUSTOM_PACKET_SIZE = 1373;
+deprecated enum TOX_MAX_CUSTOM_PACKET_SIZE = 1373;
 uint tox_max_custom_packet_size() @nogc;
 
 /**
@@ -295,8 +305,10 @@ uint tox_file_id_length() @nogc;
 
 /**
  * Maximum file name length for file transfers.
+ *
+ * @deprecated The macro will be removed in 0.3.0. Use the function instead.
  */
-enum TOX_MAX_FILENAME_LENGTH = 255;
+deprecated enum TOX_MAX_FILENAME_LENGTH = 255;
 uint tox_max_filename_length() @nogc;
 
 
@@ -347,12 +359,6 @@ enum : int {
      * on IRC.
      */
     TOX_MESSAGE_TYPE_ACTION,
-
-    /**
-     * Correction of the last message. With empty message body can be used to mark
-     * last message as deleted.
-     */
-    TOX_MESSAGE_TYPE_CORRECTION,
 }
 
 
@@ -460,7 +466,7 @@ alias tox_log_cb = void function (Tox* tox, TOX_LOG_LEVEL level, const(char)* fi
 
 
 /**
- * This struct contains all the startup options for Tox. You must tox_options_new to
+ * This struct contains all the startup options for Tox. You must use tox_options_new to
  * allocate an object of this type.
  */
 struct Tox_Options {
@@ -877,8 +883,11 @@ enum : int {
 /**
  * Return whether we are connected to the DHT. The return value is equal to the
  * last value received through the `self_connection_status` callback.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ * in the client state.
  */
-TOX_CONNECTION tox_self_get_connection_status(const(Tox)* tox) @nogc;
+deprecated TOX_CONNECTION tox_self_get_connection_status(const(Tox)* tox) @nogc;
 
 /**
  * @param connection_status Whether we are connected to the DHT.
@@ -1433,8 +1442,11 @@ void tox_callback_friend_status_message(Tox* tox, tox_friend_status_message_cb c
  *
  * The status returned is equal to the last status received through the
  * `friend_status` callback.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ * in the client state.
  */
-TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
+deprecated TOX_USER_STATUS tox_friend_get_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose user status
@@ -1462,8 +1474,11 @@ void tox_callback_friend_status(Tox* tox, tox_friend_status_cb callback) @nogc;
  *
  * @return the friend's connection status as it was received through the
  *   `friend_connection_status` event.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ * in the client state.
  */
-TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
+deprecated TOX_CONNECTION tox_friend_get_connection_status(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend whose connection status
@@ -1493,8 +1508,11 @@ void tox_callback_friend_connection_status(Tox* tox, tox_friend_connection_statu
  * @return true if the friend is typing.
  * @return false if the friend is not typing, or the friend number was
  *   invalid. Inspect the error code to determine which case it is.
+ *
+ * @deprecated This getter is deprecated. Use the event and store the status
+ * in the client state.
  */
-bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
+deprecated bool tox_friend_get_typing(const(Tox)* tox, uint friend_number, TOX_ERR_FRIEND_QUERY* error=null) @nogc;
 
 /**
  * @param friend_number The friend number of the friend who started or stopped
@@ -2273,41 +2291,35 @@ void tox_callback_conference_title(Tox* tox, tox_conference_title_cb callback) @
 
 
 /**
- * Peer list state change types.
+ * @param conference_number The conference number of the conference the
+ *   peer is in.
+ * @param peer_number The ID of the peer who changed their nickname.
+ * @param name A byte array containing the new nickname.
+ * @param length The size of the name byte array.
  */
-alias TOX_CONFERENCE_STATE_CHANGE = int;
-enum : int {
-    /**
-     * A peer has joined the conference.
-     */
-    TOX_CONFERENCE_STATE_CHANGE_PEER_JOIN,
-
-    /**
-     * A peer has exited the conference.
-     */
-    TOX_CONFERENCE_STATE_CHANGE_PEER_EXIT,
-
-    /**
-     * A peer has changed their name.
-     */
-    TOX_CONFERENCE_STATE_CHANGE_PEER_NAME_CHANGE,
-}
+alias tox_conference_peer_name_cb = void function (Tox* tox, uint conference_number, uint peer_number, const(char)* name, usize length, void* user_data) nothrow @system;
 
 
 /**
- * @param conference_number The conference number of the conference the title change is intended for.
- * @param peer_number The ID of the peer who changed the title.
- * @param change The type of change (one of TOX_CONFERENCE_STATE_CHANGE).
- */
-alias tox_conference_namelist_change_cb = void function (Tox* tox, uint conference_number, uint peer_number, TOX_CONFERENCE_STATE_CHANGE change, void* user_data) nothrow @system;
-
-
-/**
- * Set the callback for the `conference_namelist_change` event. Pass NULL to unset.
+ * Set the callback for the `conference_peer_name` event. Pass NULL to unset.
  *
- * This event is triggered when the peer list changes (name change, peer join, peer exit).
+ * This event is triggered when a peer changes their name.
  */
-void tox_callback_conference_namelist_change(Tox* tox, tox_conference_namelist_change_cb callback) @nogc;
+void tox_callback_conference_peer_name(Tox* tox, tox_conference_peer_name_cb callback) @nogc;
+
+/**
+ * @param conference_number The conference number of the conference the
+ *   peer is in.
+ */
+alias tox_conference_peer_list_changed_cb = void function (Tox* tox, uint conference_number, void* user_data) nothrow @system;
+
+
+/**
+ * Set the callback for the `conference_peer_list_changed` event. Pass NULL to unset.
+ *
+ * This event is triggered when a peer joins or leaves the conference.
+ */
+void tox_callback_conference_peer_list_changed(Tox* tox, tox_conference_peer_list_changed_cb callback) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_NEW = int;
