@@ -780,6 +780,7 @@ public:
   /// find line with this word index
   /// returns line number or -1
   int findLineWithWord (uint idx) nothrow @trusted @nogc {
+    if (linesUsed == 0) return -1;
     return findLineBinary((LayLine* l) {
       if (idx < l.wstart) return -1;
       if (idx >= l.wend) return 1;
@@ -790,7 +791,7 @@ public:
   /// find line at this pixel coordinate
   /// returns line number or -1
   int findLineAtY (int y) nothrow @trusted @nogc {
-    if (linesUsed == 0) return 0;
+    if (linesUsed == 0) return -1;
     if (y < 0) return 0;
     if (y >= mTextHeight) return cast(int)linesUsed-1;
     auto res = findLineBinary((LayLine* l) {
@@ -810,7 +811,7 @@ public:
       if (x < w.x) return -1;
       return (x >= (wnum+1 < ln.wordCount ? w[1].x : w.x+w.w) ? 1 : 0);
     }
-    if (ln is null || ln.wordCount == 0) return -1;
+    if (linesUsed == 0 || ln is null || ln.wordCount == 0) return -1;
     int bot = 0, i = ln.wordCount-1;
     while (bot != i) {
       int mid = i-(i-bot)/2;
@@ -824,8 +825,9 @@ public:
   }
 
   /// find word at the given coordinates
-  /// returns line number or -1
+  /// returns word index or -1
   int wordAtXY (int x, int y) nothrow @trusted @nogc {
+    if (linesUsed == 0) return -1;
     auto lidx = findLineAtY(y);
     if (lidx < 0) return -1;
     auto ln = lines+lidx;
