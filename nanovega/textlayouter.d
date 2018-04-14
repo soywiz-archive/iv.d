@@ -59,7 +59,7 @@ public abstract class LayObject {
 /// This object is used to get various text dimensions.
 public final class LayFontStash {
 public:
-  FONScontext* fs; ///
+  FONSContext fs; ///
 
 private:
   bool killFontStash;
@@ -80,12 +80,12 @@ public:
       fs = nvg.fonsContext;
       //{ import core.stdc.stdio; printf("*** reusing font stash!\n"); }
     } else {
-      FONSparams fontParams;
+      FONSParams fontParams;
       // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
       fontParams.width = 32;
       fontParams.height = 32;
       fontParams.flags = FONS_ZERO_TOPLEFT;
-      fs = FONSContext.createInternal(&fontParams);
+      fs = FONSContext.createInternal(fontParams);
       if (fs is null) throw new Exception("error creating font stash");
       killFontStash = true;
       fs.spacing = 0;
@@ -101,7 +101,7 @@ public:
   @property ownsFontContext () const pure nothrow @safe @nogc => killFontStash;
 
   private void freeFontStash () nothrow @nogc {
-    if (killFontStash && fs !is null) fs.fonsDeleteInternal();
+    if (killFontStash && fs !is null) fs.kill();
     killFontStash = false;
     fs = null;
   }
