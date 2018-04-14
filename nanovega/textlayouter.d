@@ -85,12 +85,12 @@ public:
       fontParams.width = 32;
       fontParams.height = 32;
       fontParams.flags = FONS_ZERO_TOPLEFT;
-      fs = fonsCreateInternal(&fontParams);
+      fs = FONSContext.createInternal(&fontParams);
       if (fs is null) throw new Exception("error creating font stash");
       killFontStash = true;
-      fonsSetSpacing(fs, 0);
-      fonsSetBlur(fs, 0);
-      fonsSetAlign(fs, NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline));
+      fs.spacing = 0;
+      fs.blur = 0;
+      fs.textAlign = NVGTextAlign(NVGTextAlign.H.Left, NVGTextAlign.V.Baseline);
     }
   }
 
@@ -109,52 +109,53 @@ public:
   /// add new font to stash
   void addFont (const(char)[] name, const(char)[] path) {
     if (name.length == 0) throw new Exception("invalid font face name");
-    int fid = fs.fonsAddFont(name, path, NVG_INVERT_FONT_AA);
+    int fid = fs.addFont(name, path, NVG_INVERT_FONT_AA);
     if (fid == FONS_INVALID) throw new Exception("font '"~name.idup~"' is not found at '"~path.idup~"'");
   }
 
   /// returns "font id" which can be used in `fontFace()`
-  @property int fontFaceId (const(char)[] name) nothrow @safe @nogc {
-    return fonsGetFontByName(fs, name);
+  @property int fontFaceId (const(char)[] name) const pure nothrow @safe @nogc {
+    return fs.getFontByName(name);
   }
 
   /// returns font name for the given id (or `null`)
-  @property const(char)[] fontFace (int fid) nothrow @safe @nogc {
+  @property const(char)[] fontFace (int fid) const pure nothrow @safe @nogc {
     if (fid < 0) return null;
-    return fonsGetNameByIndex(fs, fid);
+    return fs.getNameByIndex(fid);
   }
 
   /// set current font
-  void setSize (int fsz) nothrow @safe @nogc {
+  void size (int fsz) nothrow @safe @nogc {
     if (fsz < 1) fsz = 1;
-    fonsSetSize(fs, fsz);
+    fs.size = fsz;
     lastStyle.fontsize = fsz;
   }
 
   /// set current font
-  void setFont (int fid) nothrow @safe @nogc {
+  void font (int fid) nothrow @safe @nogc {
     if (fid == FONS_INVALID) {
       fontWasSet = false;
       lastStyle.fontface = -1;
     } else if (!fontWasSet || lastStyle.fontface != fid) {
-      fonsSetFont(fs, fid);
+      fs.fontId = fid;
       lastStyle.fontface = fid;
       fontWasSet = true;
     }
   }
 
   /// set current font
-  void setFont (const(char)[] aface) nothrow @safe @nogc {
-    setFont(fontFaceId(aface));
+  void font (const(char)[] aface) nothrow @safe @nogc {
+    pragma(inline, true);
+    font(fontFaceId(aface));
   }
 
   /// set current font according to the given style
-  void setFont() (in auto ref LayFontStyle style) nothrow @safe @nogc {
+  void font() (in auto ref LayFontStyle style) nothrow @safe @nogc {
     int fsz = style.fontsize;
     if (fsz < 1) fsz = 1;
     if (!fontWasSet || fsz != lastStyle.fontsize || style.fontface != lastStyle.fontface) {
-      if (style.fontface != lastStyle.fontface) fonsSetFont(fs, style.fontface);
-      if (fsz != lastStyle.fontsize) fonsSetSize(fs, fsz);
+      if (style.fontface != lastStyle.fontface) fs.fontId = style.fontface;
+      if (fsz != lastStyle.fontsize) fs.size = fsz;
       lastStyle = style;
       lastStyle.fontsize = fsz;
       fontWasSet = true;
@@ -166,7 +167,7 @@ public:
     import std.algorithm : max;
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float[4] b = void;
-    float adv = fs.fonsTextBounds(0, 0, str, b[]);
+    float adv = fs.getTextBounds(0, 0, str, b[]);
     float w = b[2]-b[0];
     return cast(int)lrintf(max(adv, w));
   }
@@ -217,7 +218,7 @@ public:
     // use line bounds for height
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float y0 = void, y1 = void;
-    fs.fonsLineBounds(0, &y0, &y1);
+    fs.getLineBounds(0, &y0, &y1);
     return cast(int)lrintf(y1-y0);
   }
 
@@ -226,7 +227,7 @@ public:
   void textMetrics (int* asc, int* desc, int* lineh) nothrow @trusted @nogc {
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     float a = void, d = void, h = void;
-    fs.fonsVertMetrics(&a, &d, &h);
+    fs.getVertMetrics(&a, &d, &h);
     if (asc !is null) *asc = cast(int)lrintf(a);
     if (desc !is null) *desc = cast(int)lrintf(d);
     if (lineh !is null) *lineh = cast(int)lrintf(h);
@@ -1176,7 +1177,7 @@ private:
     w.props = w.propsOrig;
     // set word dimensions
     if (w.style.fontface < 0) assert(0, "invalid font face in word style");
-    laf.setFont(w.style);
+    laf.font = w.style;
     w.w = w.wsp = w.whyph = 0;
     // calculate ascent, descent and height
     {
@@ -1210,7 +1211,7 @@ private:
       w.props.hyphen = false;
       // set word dimensions
       if (w.style.fontface < 0) assert(0, "invalid font face in word style");
-      laf.setFont(w.style);
+      laf.font = w.style;
       // i may need spacing later, and anyway most words should be with spacing, so calc it unconditionally
       if (w.wend > w.wstart) {
         auto t = wordText(*w);
@@ -1267,7 +1268,7 @@ private:
             if (ln.just.paraIndent > 0 && (w.just.left || w.just.justify)) {
               auto ind = w.paraPad;
               if (ind < 0) {
-                laf.setFont(w.style);
+                laf.font = w.style;
                 ind = cast(short)laf.spacesWidth(ln.just.paraIndent);
                 w.paraPad = ind;
               }
