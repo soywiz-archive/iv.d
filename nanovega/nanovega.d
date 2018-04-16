@@ -1528,11 +1528,11 @@ public void pickmode (NVGContext ctx, uint v) nothrow @trusted @nogc { pragma(in
 
 // tesselator options
 
-///
+/// Get current Bezier tesselation mode. See [NVGTesselation].
 /// Group: context_management
 public NVGTesselation tesselation (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null ? ctx.tesselatortype : NVGTesselation.DeCasteljau); }
 
-///
+/// Set current Bezier tesselation mode. See [NVGTesselation].
 /// Group: context_management
 public void tesselation (NVGContext ctx, NVGTesselation v) nothrow @trusted @nogc { pragma(inline, true); if (ctx !is null) ctx.tesselatortype = v; }
 
@@ -8022,7 +8022,7 @@ public:
   /// Is this outline empty?
   @property empty () const pure { pragma(inline, true); return (dsaddr == 0 || ds.ccount == 0); }
 
-  /// Returns umber of commands in outline.
+  /// Returns number of commands in outline.
   @property int length () const pure { pragma(inline, true); return (dsaddr ? ds.ccount : 0); }
 
   /// Returns "flattened" path. Flattened path consists of only two commands kinds: MoveTo and LineTo.
