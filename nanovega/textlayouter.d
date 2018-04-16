@@ -80,12 +80,8 @@ public:
       fs = nvg.fonsContext;
       //{ import core.stdc.stdio; printf("*** reusing font stash!\n"); }
     } else {
-      FONSParams fontParams;
       // image size doesn't matter, as we won't create font bitmaps here anyway (we only interested in dimensions)
-      fontParams.width = 32;
-      fontParams.height = 32;
-      fontParams.flags = FONS_ZERO_TOPLEFT;
-      fs = FONSContext.createInternal(fontParams);
+      fs = FONSContext.create(FONSParams.init);
       if (fs is null) throw new Exception("error creating font stash");
       killFontStash = true;
       fs.spacing = 0;
@@ -121,7 +117,7 @@ public:
   /// returns font name for the given id (or `null`)
   @property const(char)[] fontFace (int fid) const pure nothrow @safe @nogc {
     if (fid < 0) return null;
-    return fs.getNameByIndex(fid);
+    return fs.getNameById(fid);
   }
 
   /// set current font

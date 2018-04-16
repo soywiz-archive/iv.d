@@ -343,51 +343,21 @@ The following code illustrates the OpenGL state touched by the rendering code:
 
     Note: currently only solid color fill is supported for text.
 
-  path_recording =
-    ## Recording and Replaying Pathes
+  font_stash =
+    ## Low-level font engine
 
-    $(WARNING This API is hightly experimental, and is subject to change.
-              While I will try to keep it compatible in future NanoVega
-              versions, no promises are made. Also note that NanoVega
-              rendering is quite fast, so you prolly don't need this
-              functionality. If you really want to render-once-and-copy,
-              consider rendering to FBO, and use imaging API to blit
-              FBO texture instead. Note that NanoVega supports alot of
-              blit/copy modes.)
+    FontStash is used to load fonts, manage font atlases, and get various text metrics.
+    You don't need any graphics context to use FontStash, so you can do things like text
+    layouting outside of your rendering code. Loaded fonts are refcounted, so it is cheap
+    to create new FontStash, copy fonts from NanoVega context into it, and use that new
+    FontStash to do some UI layouting, for example. Also note that you can get text metrics
+    without creating glyph bitmaps; this way you don't need to waste CPU and memory resources
+    to render unneeded images into font atlas, and you can layout alot of text very fast.
 
-    It is posible to record render commands and replay them later. This will allow
-    you to skip possible time-consuming tesselation stage. Potential uses of this
-    feature is, for example, rendering alot of similar complex paths, like game
-    tiles, or enemy sprites.
+    Note that "FontStash" is abbrevated as "FONS". So when you see some API that contains
+    word "fons" in it, this is not a typo, and it should not read "font" intead.
 
-    Path replaying has some limitations, though: you cannot change stroke width,
-    fringe size, tesselation tolerance, or rescale path. But you can change fill
-    color/pattern, stroke color, translate and/or rotate saved paths.
-
-    Note that text rendering commands are not saved, as technically text rendering
-    is not a path.
-
-    To translate or rotate a record, use [affineGPU] API call.
-
-    To record render commands, you must create new path set with [newPathSet]
-    function, then start recording with [startRecording]. You can cancel current
-    recording with [cancelRecording], or commit (save) recording with [stopRecording].
-
-    You can resume recording with [startRecording] after [stopRecording] call.
-    Calling [cancelRecording] will cancel only current recording session (i.e. it
-    will forget everything from the very latest [startRecording], not the whole
-    record).
-
-    Finishing frame with [endFrame] will automatically commit current recording, and
-    calling [cancelFrame] will cancel recording by calling [cancelRecording].
-
-    Note that commit recording will clear current picking scene (but cancelling won't).
-
-    Calling [startRecording] without commiting or cancelling recoriding will commit.
-
-    $(WARNING Text output is not recorded now. Neither is scissor, so if you are using
-              scissoring or text in your paths (UI, for example), things will not
-              work as you may expect.)
+    TODO for Ketmar: write some nice example code here, and finish documenting FontStash API.
  */
 module iv.nanovega.nanovega;
 private:
@@ -1451,10 +1421,49 @@ struct NVGpathCache {
 public alias NVGContext = NVGcontextinternal*;
 
 /// FontStash context
+/// Group: font_stash
 public alias FONSContext = FONScontextInternal*;
 
 /// Returns FontStash context of the given NanoVega context.
-public FONSContext fonsContext (NVGContext ctx) { return (ctx !is null && ctx.contextAlive ? ctx.fs : null); }
+/// Group: font_stash
+public FONSContext fonsContext (NVGContext ctx) pure nothrow @trusted @nogc { pragma(inline, true); return (ctx !is null && ctx.contextAlive ? ctx.fs : null); }
+
+/// Returns scale that should be applied to FontStash parameters due to matrix transformations on the context (or 1)
+/// Group: font_stash
+public float fonsScale (NVGContext ctx) /*pure*/ nothrow @trusted @nogc {
+  pragma(inline, true);
+  return (ctx !is null && ctx.contextAlive && ctx.nstates > 0 ? nvg__getFontScale(&ctx.states.ptr[ctx.nstates-1])*ctx.devicePxRatio : 1);
+}
+
+/// Setup FontStash from the given NanoVega context font parameters. Note that this will apply transformation scale too.
+/// Returns `false` if FontStash or NanoVega context is not active.
+/// Group: font_stash
+public bool setupFonsFrom (FONSContext stash, NVGContext ctx) nothrow @trusted @nogc {
+  if (stash is null || ctx is null || !ctx.contextAlive || ctx.nstates == 0) return false;
+  NVGstate* state = nvg__getState(ctx);
+  immutable float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
+  stash.size = state.fontSize*scale;
+  stash.spacing = state.letterSpacing*scale;
+  stash.blur = state.fontBlur*scale;
+  stash.textAlign = state.textAlign;
+  stash.fontId = state.fontId;
+  return true;
+}
+
+/// Setup NanoVega context font parameters from the given FontStash. Note that NanoVega can apply transformation scale later.
+/// Returns `false` if FontStash or NanoVega context is not active.
+/// Group: font_stash
+public bool setupCtxFrom (NVGContext ctx, FONSContext stash) nothrow @trusted @nogc {
+  if (stash is null || ctx is null || !ctx.contextAlive || ctx.nstates == 0) return false;
+  NVGstate* state = nvg__getState(ctx);
+  immutable float scale = nvg__getFontScale(state)*ctx.devicePxRatio;
+  state.fontSize = stash.size;
+  state.letterSpacing = stash.spacing;
+  state.fontBlur = stash.blur;
+  state.textAlign = stash.textAlign;
+  state.fontId = stash.fontId;
+  return true;
+}
 
 /** Bezier curve rasterizer.
  *
@@ -1810,7 +1819,7 @@ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   fontParams.renderUpdate = null;
   fontParams.renderDelete = null;
   fontParams.userPtr = null;
-  ctx.fs = FONSContext.createInternal(fontParams);
+  ctx.fs = FONSContext.create(fontParams);
   if (ctx.fs is null) goto error;
 
   // create font texture
@@ -2003,8 +2012,8 @@ public void endFrame (NVGContext ctx) nothrow @trusted @nogc {
 // ////////////////////////////////////////////////////////////////////////// //
 // Recording and Replaying Pathes
 
-/// Saved path set.
-/// Group: path_recording
+// Saved path set.
+// Group: path_recording
 public alias NVGPathSet = NVGPathSetS*;
 
 
@@ -2257,8 +2266,8 @@ void appendCurrentPathToCache (NVGContext ctx, NVGPathSet svp, in ref NVGPaint p
   }
 }
 
-/// Create new empty path set.
-/// Group: path_recording
+// Create new empty path set.
+// Group: path_recording
 public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
   import core.stdc.stdlib : malloc;
   import core.stdc.string : memset;
@@ -2270,12 +2279,12 @@ public NVGPathSet newPathSet (NVGContext ctx) nothrow @trusted @nogc {
   return res;
 }
 
-/// Is the given path set empty? Empty path set can be `null`.
-/// Group: path_recording
+// Is the given path set empty? Empty path set can be `null`.
+// Group: path_recording
 public bool empty (NVGPathSet svp) pure nothrow @safe @nogc { pragma(inline, true); return (svp is null || svp.nnodes == 0); }
 
-/// Clear path set contents. Will release $(B some) allocated memory (this function is meant to clear something that will be reused).
-/// Group: path_recording
+// Clear path set contents. Will release $(B some) allocated memory (this function is meant to clear something that will be reused).
+// Group: path_recording
 public void clear (NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
     import core.stdc.stdlib : free;
@@ -2284,8 +2293,8 @@ public void clear (NVGPathSet svp) nothrow @trusted @nogc {
   }
 }
 
-/// Destroy path set (frees all allocated memory).
-/// Group: path_recording
+// Destroy path set (frees all allocated memory).
+// Group: path_recording
 public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null) {
     import core.stdc.stdlib : free;
@@ -2297,8 +2306,8 @@ public void kill (ref NVGPathSet svp) nothrow @trusted @nogc {
   }
 }
 
-/// Start path recording. [svp] should be alive until recording is cancelled or stopped.
-/// Group: path_recording
+// Start path recording. [svp] should be alive until recording is cancelled or stopped.
+// Group: path_recording
 public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @nogc {
   if (svp !is null && svp.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   ctx.stopRecording();
@@ -2307,7 +2316,7 @@ public void startRecording (NVGContext ctx, NVGPathSet svp) nothrow @trusted @no
   ctx.recblockdraw = false;
 }
 
-/** Start path recording. [svp] should be alive until recording is cancelled or stopped.
+/* Start path recording. [svp] should be alive until recording is cancelled or stopped.
  *
  * This will block all rendering, so you can call your rendering functions to record paths without actual drawing.
  * Commiting or cancelling will re-enable rendering.
@@ -2323,8 +2332,8 @@ public void startBlockingRecording (NVGContext ctx, NVGPathSet svp) nothrow @tru
   ctx.recblockdraw = true;
 }
 
-/// Commit recorded paths. It is safe to call this when recording is not started.
-/// Group: path_recording
+// Commit recorded paths. It is safe to call this when recording is not started.
+// Group: path_recording
 public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null && ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
   if (ctx.recset !is null) ctx.recset.takeCurrentPickScene(ctx);
@@ -2333,8 +2342,8 @@ public void stopRecording (NVGContext ctx) nothrow @trusted @nogc {
   ctx.recblockdraw = false;
 }
 
-/// Cancel path recording.
-/// Group: path_recording
+// Cancel path recording.
+// Group: path_recording
 public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
   if (ctx.recset !is null) {
     if (ctx.recset.svctx !is ctx) assert(0, "NanoVega: cannot share path set between contexts");
@@ -2347,7 +2356,7 @@ public void cancelRecording (NVGContext ctx) nothrow @trusted @nogc {
   ctx.recblockdraw = false;
 }
 
-/** Replay saved path set.
+/* Replay saved path set.
  *
  * Replaying record while you're recording another one is undefined behavior.
  *
@@ -4017,7 +4026,7 @@ void nvg__pathWinding (NVGContext ctx, NVGWinding winding) nothrow @trusted @nog
   path.mWinding = winding;
 }
 
-float nvg__getAverageScale() (in auto ref NVGMatrix t) nothrow @trusted @nogc {
+float nvg__getAverageScale() (in auto ref NVGMatrix t) /*pure*/ nothrow @trusted @nogc {
   immutable float sx = nvg__sqrtf(t.mat.ptr[0]*t.mat.ptr[0]+t.mat.ptr[2]*t.mat.ptr[2]);
   immutable float sy = nvg__sqrtf(t.mat.ptr[1]*t.mat.ptr[1]+t.mat.ptr[3]*t.mat.ptr[3]);
   return (sx+sy)*0.5f;
@@ -8250,7 +8259,7 @@ float nvg__quantize (float a, float d) pure nothrow @safe @nogc {
   return (cast(int)(a/d+0.5f))*d;
 }
 
-float nvg__getFontScale (NVGstate* state) nothrow @safe @nogc {
+float nvg__getFontScale (NVGstate* state) /*pure*/ nothrow @safe @nogc {
   pragma(inline, true);
   return nvg__min(nvg__quantize(nvg__getAverageScale(state.xform), 0.01f), 4.0f);
 }
@@ -9096,22 +9105,24 @@ version(nanovg_use_freetype_ii) {
 // ////////////////////////////////////////////////////////////////////////// //
 //version = nanovg_ft_mono;
 
-enum FONS_INVALID = -1;
+/// Invald font id.
+/// Group: font_stash
+public enum FONS_INVALID = -1;
 
-alias FONSflags = uint;
-enum /*FONSflags*/ : uint {
+public alias FONSflags = uint;
+public enum /*FONSflags*/ : uint {
   FONS_ZERO_TOPLEFT    = 1U<<0,
   FONS_ZERO_BOTTOMLEFT = 1U<<1,
 }
 
-alias FONSglyphBitmap = uint;
-enum /*FONSglyphBitmap*/ : uint {
+public alias FONSglyphBitmap = uint;
+public enum /*FONSglyphBitmap*/ : uint {
   FONS_GLYPH_BITMAP_OPTIONAL = 1,
   FONS_GLYPH_BITMAP_REQUIRED = 2,
 }
 
-alias FONSerrorCode = int;
-enum /*FONSerrorCode*/ : int {
+public alias FONSerrorCode = int;
+public enum /*FONSerrorCode*/ : int {
   // Font atlas is full.
   FONS_ATLAS_FULL = 1,
   // Scratch memory used to render glyphs is full, requested size reported in 'val', you may need to bump up FONS_SCRATCH_BUF_SIZE.
@@ -9122,9 +9133,11 @@ enum /*FONSerrorCode*/ : int {
   FONS_STATES_UNDERFLOW = 4,
 }
 
+/// Initial parameters for new FontStash.
+/// Group: font_stash
 public struct FONSParams {
   int width, height;
-  FONSflags flags;
+  FONSflags flags = FONS_ZERO_TOPLEFT;
   void* userPtr;
   bool function (void* uptr, int width, int height) nothrow @trusted @nogc renderCreate;
   int function (void* uptr, int width, int height) nothrow @trusted @nogc renderResize;
@@ -10423,7 +10436,9 @@ void kill (ref FONSAtlas atlas) nothrow @trusted @nogc {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-private struct FONScontextInternal {
+/// FontStash context (internal definition). Don't use it derectly, it was made public only to generate documentation.
+/// Group: font_stash
+public struct FONScontextInternal {
 private:
   FONSParams params;
   float itw, ith;
@@ -10655,8 +10670,120 @@ private:
     return g;
   }
 
+  void clear () nothrow @trusted @nogc {
+    import core.stdc.stdlib : free;
+
+    if (params.renderDelete !is null) params.renderDelete(params.userPtr);
+    foreach (immutable int i; 0..nfonts) fonts[i].kill();
+
+    if (atlas !is null) atlas.kill();
+    if (fonts !is null) free(fonts);
+    if (texData !is null) free(texData);
+    if (scratch !is null) free(scratch);
+    if (hashidx !is null) free(hashidx);
+  }
+
+  // add font from another fontstash
+  int addCookedFont (FONSfont* font) nothrow @trusted @nogc {
+    if (font is null || font.fdata is null) return FONS_INVALID;
+    font.fdata.incref();
+    auto res = addFontWithData(font.name[0..font.namelen], font.fdata, !font.font.mono);
+    if (res == FONS_INVALID) font.fdata.decref(); // oops
+    return res;
+  }
+
+  // fdata refcount must be already increased; it won't be changed
+  int addFontWithData (const(char)[] name, FONSfontData* fdata, bool defAA) nothrow @trusted @nogc {
+    int i, ascent, descent, fh, lineGap;
+
+    if (name.length == 0 || strequci(name, NoAlias)) return FONS_INVALID;
+    if (name.length > 32767) return FONS_INVALID;
+    if (fdata is null) return FONS_INVALID;
+
+    // find a font with the given name
+    int newidx;
+    FONSfont* oldfont = null;
+    int oldidx = findNameInHash(name);
+    if (oldidx != FONS_INVALID) {
+      // replacement font
+      oldfont = fonts[oldidx];
+      newidx = oldidx;
+    } else {
+      // new font, allocate new bucket
+      newidx = -1;
+    }
+
+    newidx = allocFontAt(newidx);
+    FONSfont* font = fonts[newidx];
+    font.setName(name);
+    font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1; // init hash lookup
+    font.fdata = fdata; // set the font data (don't change reference count)
+    fons__tt_setMono(&this, &font.font, !defAA);
+
+    // init font
+    nscratch = 0;
+    if (!fons__tt_loadFont(&this, &font.font, fdata.data, fdata.dataSize)) {
+      // we promised to not free data on error, so just clear the data store (it will be freed by the caller)
+      font.fdata = null;
+      font.kill();
+      if (oldidx != FONS_INVALID) {
+        assert(oldidx == newidx);
+        fonts[oldidx] = oldfont;
+      } else {
+        assert(newidx == nfonts-1);
+        fonts[newidx] = null;
+        --nfonts;
+      }
+      return FONS_INVALID;
+    } else {
+      // free old font data, if any
+      if (oldfont !is null) oldfont.kill();
+    }
+
+    // add font to name hash
+    if (oldidx == FONS_INVALID) addIndexToHash(newidx);
+
+    // store normalized line height
+    // the real line height is got by multiplying the lineh by font size
+    fons__tt_getFontVMetrics(&font.font, &ascent, &descent, &lineGap);
+    fh = ascent-descent;
+    font.ascender = cast(float)ascent/cast(float)fh;
+    font.descender = cast(float)descent/cast(float)fh;
+    font.lineh = cast(float)(fh+lineGap)/cast(float)fh;
+
+    //{ import core.stdc.stdio; printf("created font [%.*s] (idx=%d)...\n", cast(uint)name.length, name.ptr, idx); }
+    return newidx;
+  }
+
+  // isize: size*10
+  float getVertAlign (FONSfont* font, NVGTextAlign talign, short isize) pure nothrow @trusted @nogc {
+    if (params.flags&FONS_ZERO_TOPLEFT) {
+      final switch (talign.vertical) {
+        case NVGTextAlign.V.Top: return font.ascender*cast(float)isize/10.0f;
+        case NVGTextAlign.V.Middle: return (font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
+        case NVGTextAlign.V.Baseline: return 0.0f;
+        case NVGTextAlign.V.Bottom: return font.descender*cast(float)isize/10.0f;
+      }
+    } else {
+      final switch (talign.vertical) {
+        case NVGTextAlign.V.Top: return -font.ascender*cast(float)isize/10.0f;
+        case NVGTextAlign.V.Middle: return -(font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
+        case NVGTextAlign.V.Baseline: return 0.0f;
+        case NVGTextAlign.V.Bottom: return -font.descender*cast(float)isize/10.0f;
+      }
+    }
+    assert(0);
+  }
+
 public:
-  static FONSContext createInternal() (auto ref FONSParams params) nothrow @trusted @nogc {
+  /** Create new FontStash context. It can be destroyed with `fs.kill()` later.
+   *
+   * Note that if you don't plan to rasterize glyphs (i.e. you will use created
+   * FontStash only to measure text), you can simply pass `FONSParams.init`).
+   *
+   * Group: font_stash
+   */
+  static FONSContext create() (in auto ref FONSParams params) nothrow @trusted @nogc {
     import core.stdc.string : memcpy;
 
     FONSContext stash = null;
@@ -10667,6 +10794,8 @@ public:
     memset(stash, 0, FONScontextInternal.sizeof);
 
     memcpy(&stash.params, &params, params.sizeof);
+    if (stash.params.width < 1) stash.params.width = 32;
+    if (stash.params.height < 1) stash.params.height = 32;
 
     // allocate scratch buffer
     stash.scratch = cast(ubyte*)malloc(FONS_SCRATCH_BUF_SIZE);
@@ -10712,19 +10841,8 @@ public:
   }
 
 public:
-  private void clear () nothrow @trusted @nogc {
-    import core.stdc.stdlib : free;
-
-    if (params.renderDelete !is null) params.renderDelete(params.userPtr);
-    foreach (immutable int i; 0..nfonts) fonts[i].kill();
-
-    if (atlas !is null) atlas.kill();
-    if (fonts !is null) free(fonts);
-    if (texData !is null) free(texData);
-    if (scratch !is null) free(scratch);
-    if (hashidx !is null) free(hashidx);
-  }
-
+  /// Add fallback font (FontStash will try to find missing glyph in all fallback fonts before giving up).
+  /// Group: font_stash
   bool addFallbackFont (int base, int fallback) nothrow @trusted @nogc {
     FONSfont* baseFont = fonts[base];
     if (baseFont !is null && baseFont.nfallbacks < FONS_MAX_FALLBACKS) {
@@ -10734,26 +10852,56 @@ public:
     return false;
   }
 
+  /// Set current font size.
+  /// Group: font_stash
   @property void size (float size) nothrow @trusted @nogc { pragma(inline, true); getState.size = size; }
+
+  /// Get current font size.
+  /// Group: font_stash
   @property float size () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.size; }
 
+  /// Set current letter spacing.
+  /// Group: font_stash
   @property void spacing (float spacing) nothrow @trusted @nogc { pragma(inline, true); getState.spacing = spacing; }
+
+  /// Get current letter spacing.
+  /// Group: font_stash
   @property float spacing () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.spacing; }
 
+  /// Set current letter blur.
+  /// Group: font_stash
   @property void blur (float blur) nothrow @trusted @nogc { pragma(inline, true); getState.blur = blur; }
+
+  /// Get current letter blur.
+  /// Group: font_stash
   @property float blur () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.blur; }
 
+  /// Set current text align.
+  /// Group: font_stash
   @property void textAlign (NVGTextAlign talign) nothrow @trusted @nogc { pragma(inline, true); getState.talign = talign; }
+
+  /// Get current text align.
+  /// Group: font_stash
   @property NVGTextAlign textAlign () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.talign; }
 
+  /// Set current font id.
+  /// Group: font_stash
   @property void fontId (int font) nothrow @trusted @nogc { pragma(inline, true); getState.font = font; }
+
+  /// Get current font id.
+  /// Group: font_stash
   @property int fontId () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.font; }
 
+  /// Set current font using its name.
+  /// Group: font_stash
   @property void fontId (const(char)[] name) nothrow @trusted @nogc { pragma(inline, true); getState.font = getFontByName(name); }
 
+  /// Check if FontStash has a font with the given name loaded.
+  /// Group: font_stash
   bool hasFont (const(char)[] name) const pure nothrow @trusted @nogc { pragma(inline, true); return (getFontByName(name) >= 0); }
 
-  // get AA for current font or for the specified font
+  /// Get AA for the current font, or for the specified font.
+  /// Group: font_stash
   bool getFontAA (int font=-1) nothrow @trusted @nogc {
     FONSstate* state = getState;
     if (font < 0) font = state.font;
@@ -10762,6 +10910,8 @@ public:
     return (f !is null ? !f.font.mono : false);
   }
 
+  /// Push current state. Returns `false` if state stack overflowed.
+  /// Group: font_stash
   bool pushState () nothrow @trusted @nogc {
     if (nstates >= FONS_MAX_STATES) {
       if (handleError !is null) handleError(FONS_STATES_OVERFLOW, 0);
@@ -10775,6 +10925,8 @@ public:
     return true;
   }
 
+  /// Pop current state. Returns `false` if state stack underflowed.
+  /// Group: font_stash
   bool popState () nothrow @trusted @nogc {
     if (nstates <= 1) {
       if (handleError !is null) handleError(FONS_STATES_UNDERFLOW, 0);
@@ -10784,6 +10936,8 @@ public:
     return true;
   }
 
+  /// Clear current state (i.e. set it to some sane defaults).
+  /// Group: font_stash
   void clearState () nothrow @trusted @nogc {
     FONSstate* state = getState;
     state.size = 12.0f;
@@ -10795,7 +10949,22 @@ public:
 
   private enum NoAlias = ":noaa";
 
-  // defAA: antialias flag for fonts without ":noaa"
+  /** Add font to FontStash.
+   *
+   * Load scalable font from disk, and add it to FontStash. If you will try to load a font
+   * with same name and path several times, FontStash will load it only once. Also, you can
+   * load new disk font for any existing logical font.
+   *
+   * Params:
+   *   name = logical font name, that will be used to select this font later.
+   *   path = path to disk file with your font.
+   *   defAA = should FontStash use antialiased font rasterizer?
+   *
+   * Returns:
+   *   font id or [FONS_INVALID].
+   *
+   * Group: font_stash
+   */
   int addFont (const(char)[] name, const(char)[] path, bool defAA=false) nothrow @trusted {
     if (path.length == 0 || name.length == 0 || strequci(name, NoAlias)) return FONS_INVALID;
     if (path.length > 32768) return FONS_INVALID; // arbitrary limit
@@ -10930,8 +11099,27 @@ public:
     return res;
   }
 
-  // This will not free data on error!
+  /** Add font to FontStash, using data from memory.
+   *
+   * And already loaded font to FontStash. You can replace existing logical fonts.
+   * But note that you can't remove logical font by passing "empty" data.
+   *
+   * $(WARNING If [FONS_INVALID] returned, `data` won't be freed even if `freeData` is `true`.)
+   *
+   * Params:
+   *   name = logical font name, that will be used to select this font later.
+   *   data = font data.
+   *   dataSize = font data size.
+   *   freeData = should FontStash take ownership of the font data?
+   *   defAA = should FontStash use antialiased font rasterizer?
+   *
+   * Returns:
+   *   font id or [FONS_INVALID].
+   *
+   * Group: font_stash
+   */
   int addFontMem (const(char)[] name, ubyte* data, int dataSize, bool freeData, bool defAA=false) nothrow @trusted @nogc {
+    if (data is null || dataSize < 16) return FONS_INVALID;
     FONSfontData* fdata = fons__createFontData(data, dataSize, freeData);
     fdata.incref();
     auto res = addFontWithData(name, fdata, defAA);
@@ -10943,8 +11131,13 @@ public:
     return res;
   }
 
-  // Add fonts from another font stash.
-  // This is more effective than reloading fonts, 'cause font data will be shared.
+  /** Add fonts from another FontStash.
+   *
+   * This is more effective (and faster) than reloading fonts, because internally font data
+   * is reference counted.
+   *
+   * Group: font_stash
+   */
   void addFontsFrom (FONSContext source) nothrow @trusted @nogc {
     if (source is null) return;
     foreach (FONSfont* font; source.fonts[0..source.nfonts]) {
@@ -10965,87 +11158,16 @@ public:
     }
   }
 
-  // Add font from another fontstash.
-  private int addCookedFont (FONSfont* font) nothrow @trusted @nogc {
-    if (font is null || font.fdata is null) return FONS_INVALID;
-    font.fdata.incref();
-    auto res = addFontWithData(font.name[0..font.namelen], font.fdata, !font.font.mono);
-    if (res == FONS_INVALID) font.fdata.decref(); // oops
-    return res;
-  }
-
-  // fdata refcount must be already increased; it won't be changed
-  private int addFontWithData (const(char)[] name, FONSfontData* fdata, bool defAA) nothrow @trusted @nogc {
-    int i, ascent, descent, fh, lineGap;
-
-    if (name.length == 0 || strequci(name, NoAlias)) return FONS_INVALID;
-    if (name.length > 32767) return FONS_INVALID;
-    if (fdata is null) return FONS_INVALID;
-
-    // find a font with the given name
-    int newidx;
-    FONSfont* oldfont = null;
-    int oldidx = findNameInHash(name);
-    if (oldidx != FONS_INVALID) {
-      // replacement font
-      oldfont = fonts[oldidx];
-      newidx = oldidx;
-    } else {
-      // new font, allocate new bucket
-      newidx = -1;
-    }
-
-    newidx = allocFontAt(newidx);
-    FONSfont* font = fonts[newidx];
-    font.setName(name);
-    font.lut.ptr[0..FONS_HASH_LUT_SIZE] = -1; // init hash lookup
-    font.fdata = fdata; // set the font data (don't change reference count)
-    fons__tt_setMono(&this, &font.font, !defAA);
-
-    // init font
-    nscratch = 0;
-    if (!fons__tt_loadFont(&this, &font.font, fdata.data, fdata.dataSize)) {
-      // we promised to not free data on error, so just clear the data store (it will be freed by the caller)
-      font.fdata = null;
-      font.kill();
-      if (oldidx != FONS_INVALID) {
-        assert(oldidx == newidx);
-        fonts[oldidx] = oldfont;
-      } else {
-        assert(newidx == nfonts-1);
-        fonts[newidx] = null;
-        --nfonts;
-      }
-      return FONS_INVALID;
-    } else {
-      // free old font data, if any
-      if (oldfont !is null) oldfont.kill();
-    }
-
-    // add font to name hash
-    if (oldidx == FONS_INVALID) addIndexToHash(newidx);
-
-    // store normalized line height
-    // the real line height is got by multiplying the lineh by font size
-    fons__tt_getFontVMetrics(&font.font, &ascent, &descent, &lineGap);
-    fh = ascent-descent;
-    font.ascender = cast(float)ascent/cast(float)fh;
-    font.descender = cast(float)descent/cast(float)fh;
-    font.lineh = cast(float)(fh+lineGap)/cast(float)fh;
-
-    //{ import core.stdc.stdio; printf("created font [%.*s] (idx=%d)...\n", cast(uint)name.length, name.ptr, idx); }
-    return newidx;
-  }
-
-  // returns `null` on invalid index
-  // $(WARNING copy name, as name buffer can be invalidated by next fontstash API call!)
-  const(char)[] getNameByIndex (int idx) const pure nothrow @trusted @nogc {
+  /// Returns logical font name corresponding to the given font id, or `null`.
+  /// $(WARNING Copy returned name, as name buffer can be invalidated by next FontStash API call!)
+  /// Group: font_stash
+  const(char)[] getNameById (int idx) const pure nothrow @trusted @nogc {
     if (idx < 0 || idx >= nfonts || fonts[idx] is null) return null;
     return fonts[idx].name[0..fonts[idx].namelen];
   }
 
-  // allowSubstitutes: check AA variants if exact name wasn't found?
-  // return [FONS_INVALID] if no font was found
+  /// Returns font id corresponding to the given logical font name, or [FONS_INVALID].
+  /// Group: font_stash
   int getFontByName (const(char)[] name) const pure nothrow @trusted @nogc {
     //{ import core.stdc.stdio; printf("fonsGetFontByName: [%.*s]\n", cast(uint)name.length, name.ptr); }
     // remove ":noaa" suffix
@@ -11056,6 +11178,12 @@ public:
     return findNameInHash(name);
   }
 
+  /** Measures the specified text string. Parameter bounds should be a float[4],
+   * if the bounding box of the text should be returned. The bounds value are [xmin, ymin, xmax, ymax]
+   * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
+   *
+   * Group: font_stash
+   */
   float getTextBounds(T) (float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc if (isAnyCharType!T) {
     FONSstate* state = getState;
     uint codepoint;
@@ -11134,26 +11262,31 @@ public:
     return advance;
   }
 
+  /// Returns various font metrics. Any argument can be `null` if you aren't interested in its value.
+  /// Group: font_stash
   void getVertMetrics (float* ascender, float* descender, float* lineh) nothrow @trusted @nogc {
-    FONSfont* font;
     FONSstate* state = getState;
-    short isize;
-
     if (state.font < 0 || state.font >= nfonts) {
       if (ascender !is null) *ascender = 0;
       if (descender !is null) *descender = 0;
       if (lineh !is null) *lineh = 0;
-      return;
+    } else {
+      FONSfont* font = fonts[state.font];
+      if (font is null || font.fdata is null) {
+        if (ascender !is null) *ascender = 0;
+        if (descender !is null) *descender = 0;
+        if (lineh !is null) *lineh = 0;
+      } else {
+        short isize = cast(short)(state.size*10.0f);
+        if (ascender !is null) *ascender = font.ascender*isize/10.0f;
+        if (descender !is null) *descender = font.descender*isize/10.0f;
+        if (lineh !is null) *lineh = font.lineh*isize/10.0f;
+      }
     }
-    font = fonts[state.font];
-    isize = cast(short)(state.size*10.0f);
-    if (font is null || font.fdata is null) return;
-
-    if (ascender) *ascender = font.ascender*isize/10.0f;
-    if (descender) *descender = font.descender*isize/10.0f;
-    if (lineh) *lineh = font.lineh*isize/10.0f;
   }
 
+  /// Returns line bounds. Any argument can be `null` if you aren't interested in its value.
+  /// Group: font_stash
   void getLineBounds (float y, float* minyp, float* maxyp) nothrow @trusted @nogc {
     FONSfont* font;
     FONSstate* state = getState;
@@ -11182,12 +11315,38 @@ public:
     }
   }
 
+  /// Returns font line height (without line spacing).
+  /// Group: font_stash
+  float fontHeight () nothrow @trusted @nogc {
+    float res = void;
+    getVertMetrics(null, null, &res);
+    return res;
+  }
+
+  /// Returns font ascender (positive).
+  /// Group: font_stash
+  float fontAscender () nothrow @trusted @nogc {
+    float res = void;
+    getVertMetrics(&res, null, null);
+    return res;
+  }
+
+  /// Returns font descender (negative).
+  /// Group: font_stash
+  float fontDescender () nothrow @trusted @nogc {
+    float res = void;
+    getVertMetrics(null, &res, null);
+    return res;
+  }
+
+  //TODO: document this
   const(ubyte)* getTextureData (int* width, int* height) nothrow @trusted @nogc {
     if (width !is null) *width = params.width;
     if (height !is null) *height = params.height;
     return texData;
   }
 
+  //TODO: document this
   bool validateTexture (int* dirty) nothrow @trusted @nogc {
     if (dirtyRect.ptr[0] < dirtyRect.ptr[2] && dirtyRect.ptr[1] < dirtyRect.ptr[3]) {
       dirty[0] = dirtyRect.ptr[0];
@@ -11204,15 +11363,18 @@ public:
     return false;
   }
 
+  //TODO: document this
   void errorCallback (void delegate (int error, int val) nothrow @trusted @nogc callback) nothrow @trusted @nogc {
     handleError = callback;
   }
 
+  //TODO: document this
   void getAtlasSize (int* width, int* height) const pure nothrow @trusted @nogc {
     if (width !is null) *width = params.width;
     if (height !is null) *height = params.height;
   }
 
+  //TODO: document this
   bool expandAtlas (int width, int height) nothrow @trusted @nogc {
     import core.stdc.stdlib : free;
     import core.stdc.string : memcpy, memset;
@@ -11264,6 +11426,7 @@ public:
     return true;
   }
 
+  //TODO: document this
   bool resetAtlas (int width, int height) nothrow @trusted @nogc {
     import core.stdc.stdlib : realloc;
     import core.stdc.string : memcpy, memset;
@@ -11309,6 +11472,7 @@ public:
     return true;
   }
 
+  //TODO: document this
   bool getPathBounds (dchar dch, float[] bounds) nothrow @trusted @nogc {
     if (bounds.length > 4) bounds = bounds.ptr[0..4];
     static if (is(typeof(&fons__nvg__bounds))) {
@@ -11325,6 +11489,7 @@ public:
     }
   }
 
+  //TODO: document this
   bool toPath() (NVGContext vg, dchar dch, float[] bounds=null) nothrow @trusted @nogc {
     if (bounds.length > 4) bounds = bounds.ptr[0..4];
     static if (is(typeof(&fons__nvg__toPath))) {
@@ -11342,6 +11507,7 @@ public:
     }
   }
 
+  //TODO: document this
   bool toOutline (dchar dch, NVGPathOutline.DataStore* ol) nothrow @trusted @nogc {
     if (ol is null) return false;
     static if (is(typeof(&fons__nvg__toOutline))) {
@@ -11357,6 +11523,7 @@ public:
     }
   }
 
+  //TODO: document this
   FONSglyph* getGlyph (FONSfont* font, uint codepoint, short isize, short iblur, FONSglyphBitmap bitmapOption) nothrow @trusted @nogc {
     static uint fons__hashint() (uint a) pure nothrow @safe @nogc {
       pragma(inline, true);
@@ -11541,6 +11708,7 @@ public:
     return glyph;
   }
 
+  //TODO: document this
   void getQuad (FONSfont* font, int prevGlyphIndex, FONSglyph* glyph, float size, float scale, float spacing, float* x, float* y, FONSQuad* q) nothrow @trusted @nogc {
     if (prevGlyphIndex >= 0) {
       immutable float adv = fons__tt_getGlyphKernAdvance(&font.font, size, prevGlyphIndex, glyph.index)/**scale*/; //k8: do we really need scale here?
@@ -11600,28 +11768,10 @@ public:
       dirtyRect.ptr[3] = 0;
     }
   }
-
-  float getVertAlign (FONSfont* font, NVGTextAlign talign, short isize) nothrow @trusted @nogc {
-    if (params.flags&FONS_ZERO_TOPLEFT) {
-      final switch (talign.vertical) {
-        case NVGTextAlign.V.Top: return font.ascender*cast(float)isize/10.0f;
-        case NVGTextAlign.V.Middle: return (font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
-        case NVGTextAlign.V.Baseline: return 0.0f;
-        case NVGTextAlign.V.Bottom: return font.descender*cast(float)isize/10.0f;
-      }
-    } else {
-      final switch (talign.vertical) {
-        case NVGTextAlign.V.Top: return -font.ascender*cast(float)isize/10.0f;
-        case NVGTextAlign.V.Middle: return -(font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
-        case NVGTextAlign.V.Baseline: return 0.0f;
-        case NVGTextAlign.V.Bottom: return -font.descender*cast(float)isize/10.0f;
-      }
-    }
-    assert(0);
-  }
 }
 
-//
+/// Free all resources used by the `stash`, and `stash` itself.
+/// Group: font_stash
 public void kill (ref FONSContext stash) nothrow @trusted @nogc {
   import core.stdc.stdlib : free;
   if (stash is null) return;
