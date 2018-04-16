@@ -344,15 +344,16 @@ The following code illustrates the OpenGL state touched by the rendering code:
     Note: currently only solid color fill is supported for text.
 
   font_stash =
-    ## Low-level font engine
+    ## Low-Level Font Engine (FontStash)
 
-    FontStash is used to load fonts, manage font atlases, and get various text metrics.
+    FontStash is used to load fonts, to manage font atlases, and to get various text metrics.
     You don't need any graphics context to use FontStash, so you can do things like text
     layouting outside of your rendering code. Loaded fonts are refcounted, so it is cheap
     to create new FontStash, copy fonts from NanoVega context into it, and use that new
     FontStash to do some UI layouting, for example. Also note that you can get text metrics
-    without creating glyph bitmaps; this way you don't need to waste CPU and memory resources
-    to render unneeded images into font atlas, and you can layout alot of text very fast.
+    without creating glyph bitmaps (by using [FONSTextBoundsIterator], for example); this way
+    you don't need to waste CPU and memory resources to render unneeded images into font atlas,
+    and you can layout alot of text very fast.
 
     Note that "FontStash" is abbrevated as "FONS". So when you see some API that contains
     word "fons" in it, this is not a typo, and it should not read "font" intead.
@@ -8766,9 +8767,11 @@ private:
   NVGTextAlign fsAlign;
 
 public:
-  this (NVGContext actx, float ax, float ay) nothrow @trusted @nogc { reset(actx, ax, ay); }
+  /// Setups iteration. Takes current font parameters from the given NanoVega context.
+  this (NVGContext actx, float ax=0, float ay=0) nothrow @trusted @nogc { reset(actx, ax, ay); }
 
-  void reset (NVGContext actx, float ax, float ay) nothrow @trusted @nogc {
+  /// Resets iteration. Takes current font parameters from the given NanoVega context.
+  void reset (NVGContext actx, float ax=0, float ay=0) nothrow @trusted @nogc {
     fsiter = fsiter.init;
     this = this.init;
     if (actx is null) return;
