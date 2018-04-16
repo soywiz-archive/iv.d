@@ -9139,11 +9139,13 @@ public struct FONSParams {
   @property bool isZeroTopLeft () const pure nothrow @trusted @nogc { pragma(inline, true); return ((flags&Flag.ZeroBottomLeft) == 0); }
 }
 
+//TODO: document this
 public struct FONSQuad {
   float x0=0, y0=0, s0=0, t0=0;
   float x1=0, y1=0, s1=0, t1=0;
 }
 
+//TODO: document this
 public struct FONSTextIter(CT) if (isAnyCharType!CT) {
   alias CharType = CT;
   float x=0, y=0, nextx=0, nexty=0, scale=0, spacing=0;
