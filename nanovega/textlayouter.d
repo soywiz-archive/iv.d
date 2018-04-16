@@ -1093,6 +1093,25 @@ public:
     }
   }
 
+  /// remove `count` words from index `idx`.
+  /// you will need to call `finalize()` or forced relayouting after this.
+  void removeWordsAt (uint idx, int count) nothrow @trusted @nogc {
+    flushWord();
+    lastWasSoftHypen = false;
+    if (count < 1 || idx >= wordsUsed) return;
+    if (count > wordsUsed-idx) count = cast(int)(wordsUsed-idx);
+    if (idx+count >= wordsUsed) {
+      // just trim it
+      wordsUsed = idx;
+    } else {
+      import core.stdc.string : memmove;
+      memmove(words+idx, words+idx+count, (wordsUsed-idx-count)*words[0].sizeof);
+      wordsUsed -= count;
+      // fix word numbers
+      foreach (ref LayWord w; words[idx..wordsUsed]) w.wordNum = idx++;
+    }
+  }
+
   /// "finalize" layout: calculate lines, layout words...
   /// call this after you done feeding text
   void finalize () nothrow @trusted @nogc {
