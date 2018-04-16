@@ -1814,7 +1814,7 @@ NVGContext createInternal (NVGparams* params) nothrow @trusted @nogc {
   memset(&fontParams, 0, fontParams.sizeof);
   fontParams.width = NVG_INIT_FONTIMAGE_SIZE;
   fontParams.height = NVG_INIT_FONTIMAGE_SIZE;
-  fontParams.flags = FONS_ZERO_TOPLEFT;
+  fontParams.flags = FONSParams.Flag.ZeroTopLeft;
   fontParams.renderCreate = null;
   fontParams.renderUpdate = null;
   fontParams.renderDelete = null;
@@ -8347,7 +8347,7 @@ public float text(T) (NVGContext ctx, float x, float y, const(T)[] str) nothrow 
   verts = nvg__allocTempVerts(ctx, cverts);
   if (verts is null) return x;
 
-  if (!iter.setup(ctx.fs, x*scale, y*scale, str, FONS_GLYPH_BITMAP_REQUIRED)) return x;
+  if (!iter.setup(ctx.fs, x*scale, y*scale, str, FONSBitmapFlag.Required)) return x;
   prevIter = iter;
   while (iter.next(q)) {
     float[4*2] c = void;
@@ -8475,7 +8475,7 @@ if (isAnyCharType!T && isGoodPositionDelegate!DG)
   ctx.fs.textAlign = state.textAlign;
   ctx.fs.fontId = state.fontId;
 
-  if (!iter.setup(ctx.fs, x*scale, y*scale, str, FONS_GLYPH_BITMAP_OPTIONAL)) return npos;
+  if (!iter.setup(ctx.fs, x*scale, y*scale, str, FONSBitmapFlag.Optional)) return npos;
   prevIter = iter;
   while (iter.next(q)) {
     if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
@@ -8586,7 +8586,7 @@ if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
   }
   Phase phase = Phase.SkipBlanks; // don't skip blanks on first line
 
-  if (!iter.setup(ctx.fs, 0, 0, str, FONS_GLYPH_BITMAP_OPTIONAL)) return 0;
+  if (!iter.setup(ctx.fs, 0, 0, str, FONSBitmapFlag.Optional)) return 0;
   prevIter = iter;
   while (iter.next(q)) {
     if (iter.prevGlyphIndex < 0) { // can not retrieve glyph?
@@ -8758,7 +8758,7 @@ if (isAnyCharType!T && isGoodRowDelegate!(T, DG))
 public struct TextBoundsIterator {
 private:
   NVGContext ctx;
-  FonsTextBoundsIterator fsiter; // fontstash iterator
+  FONSTextBoundsIterator fsiter; // fontstash iterator
   float scale, invscale, xscaled, yscaled;
   // font settings
   float fsSize, fsSpacing, fsBlur;
@@ -9109,40 +9109,34 @@ version(nanovg_use_freetype_ii) {
 /// Group: font_stash
 public enum FONS_INVALID = -1;
 
-public alias FONSflags = uint;
-public enum /*FONSflags*/ : uint {
-  FONS_ZERO_TOPLEFT    = 1U<<0,
-  FONS_ZERO_BOTTOMLEFT = 1U<<1,
+public enum FONSBitmapFlag : uint {
+  Required = 0,
+  Optional = 1,
 }
 
-public alias FONSglyphBitmap = uint;
-public enum /*FONSglyphBitmap*/ : uint {
-  FONS_GLYPH_BITMAP_OPTIONAL = 1,
-  FONS_GLYPH_BITMAP_REQUIRED = 2,
-}
-
-public alias FONSerrorCode = int;
-public enum /*FONSerrorCode*/ : int {
-  // Font atlas is full.
-  FONS_ATLAS_FULL = 1,
-  // Scratch memory used to render glyphs is full, requested size reported in 'val', you may need to bump up FONS_SCRATCH_BUF_SIZE.
-  FONS_SCRATCH_FULL = 2,
-  // Calls to fonsPushState has created too large stack, if you need deep state stack bump up FONS_MAX_STATES.
-  FONS_STATES_OVERFLOW = 3,
-  // Trying to pop too many states fonsPopState().
-  FONS_STATES_UNDERFLOW = 4,
+public enum FONSError : int {
+  NoError = 0,
+  AtlasFull = 1, // Font atlas is full.
+  ScratchFull = 2, // Scratch memory used to render glyphs is full, requested size reported in 'val', you may need to bump up FONS_SCRATCH_BUF_SIZE.
+  StatesOverflow = 3, // Calls to fonsPushState has created too large stack, if you need deep state stack bump up FONS_MAX_STATES.
+  StatesUnderflow = 4, // Trying to pop too many states fonsPopState().
 }
 
 /// Initial parameters for new FontStash.
 /// Group: font_stash
 public struct FONSParams {
+  enum Flag : uint {
+    ZeroTopLeft    = 0U, // default
+    ZeroBottomLeft = 1U,
+  }
   int width, height;
-  FONSflags flags = FONS_ZERO_TOPLEFT;
+  Flag flags = Flag.ZeroTopLeft;
   void* userPtr;
   bool function (void* uptr, int width, int height) nothrow @trusted @nogc renderCreate;
   int function (void* uptr, int width, int height) nothrow @trusted @nogc renderResize;
   void function (void* uptr, int* rect, const(ubyte)* data) nothrow @trusted @nogc renderUpdate;
   void function (void* uptr) nothrow @trusted @nogc renderDelete;
+  @property bool isZeroTopLeft () const pure nothrow @trusted @nogc { pragma(inline, true); return ((flags&Flag.ZeroBottomLeft) == 0); }
 }
 
 public struct FONSQuad {
@@ -9161,19 +9155,19 @@ public struct FONSTextIter(CT) if (isAnyCharType!CT) {
   const(CT)* s; // string
   const(CT)* n; // next
   const(CT)* e; // end
-  FONSglyphBitmap bitmapOption;
+  FONSBitmapFlag bitmapOption;
   static if (is(CT == char)) {
     uint utf8state;
   }
 
-  this (FONSContext astash, float ax, float ay, const(CharType)[] astr, FONSglyphBitmap abitmapOption) nothrow @trusted @nogc { setup(astash, ax, ay, astr, abitmapOption); }
+  this (FONSContext astash, float ax, float ay, const(CharType)[] astr, FONSBitmapFlag abitmapOption) nothrow @trusted @nogc { setup(astash, ax, ay, astr, abitmapOption); }
   ~this () nothrow @trusted @nogc { pragma(inline, true); static if (is(CT == char)) utf8state = 0; s = n = e = null; }
 
   @property const(CT)* stringp () const pure nothrow @trusted @nogc { pragma(inline, true); return s; }
   @property const(CT)* nextp () const pure nothrow @trusted @nogc { pragma(inline, true); return n; }
   @property const(CT)* endp () const pure nothrow @trusted @nogc { pragma(inline, true); return e; }
 
-  bool setup (FONSContext astash, float ax, float ay, const(CharType)[] astr, FONSglyphBitmap abitmapOption) nothrow @trusted @nogc {
+  bool setup (FONSContext astash, float ax, float ay, const(CharType)[] astr, FONSBitmapFlag abitmapOption) nothrow @trusted @nogc {
     import core.stdc.string : memset;
 
     memset(&this, 0, this.sizeof);
@@ -10250,9 +10244,9 @@ void kill (ref FONSfont* font) nothrow @trusted @nogc {
 struct FONSstate {
   int font;
   NVGTextAlign talign;
-  float size;
-  float blur;
-  float spacing;
+  float size = 0;
+  float blur = 0;
+  float spacing = 0;
 }
 
 
@@ -10455,7 +10449,7 @@ private:
   FONSstate[FONS_MAX_STATES] states;
   int nstates;
 
-  void delegate (int error, int val) nothrow @trusted @nogc handleError;
+  void delegate (FONSError error, int val) nothrow @trusted @nogc handleError;
 
   @disable this (this);
   void opAssign() (in auto ref FONScontextInternal ctx) { static assert(0, "FONS copying is not allowed"); }
@@ -10757,7 +10751,7 @@ private:
 
   // isize: size*10
   float getVertAlign (FONSfont* font, NVGTextAlign talign, short isize) pure nothrow @trusted @nogc {
-    if (params.flags&FONS_ZERO_TOPLEFT) {
+    if (params.isZeroTopLeft) {
       final switch (talign.vertical) {
         case NVGTextAlign.V.Top: return font.ascender*cast(float)isize/10.0f;
         case NVGTextAlign.V.Middle: return (font.ascender+font.descender)/2.0f*cast(float)isize/10.0f;
@@ -10780,8 +10774,6 @@ public:
    *
    * Note that if you don't plan to rasterize glyphs (i.e. you will use created
    * FontStash only to measure text), you can simply pass `FONSParams.init`).
-   *
-   * Group: font_stash
    */
   static FONSContext create() (in auto ref FONSParams params) nothrow @trusted @nogc {
     import core.stdc.string : memcpy;
@@ -10842,7 +10834,6 @@ public:
 
 public:
   /// Add fallback font (FontStash will try to find missing glyph in all fallback fonts before giving up).
-  /// Group: font_stash
   bool addFallbackFont (int base, int fallback) nothrow @trusted @nogc {
     FONSfont* baseFont = fonts[base];
     if (baseFont !is null && baseFont.nfallbacks < FONS_MAX_FALLBACKS) {
@@ -10852,56 +10843,27 @@ public:
     return false;
   }
 
-  /// Set current font size.
-  /// Group: font_stash
-  @property void size (float size) nothrow @trusted @nogc { pragma(inline, true); getState.size = size; }
+  @property void size (float size) nothrow @trusted @nogc { pragma(inline, true); getState.size = size; } /// Set current font size.
+  @property float size () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.size; } /// Get current font size.
 
-  /// Get current font size.
-  /// Group: font_stash
-  @property float size () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.size; }
+  @property void spacing (float spacing) nothrow @trusted @nogc { pragma(inline, true); getState.spacing = spacing; } /// Set current letter spacing.
+  @property float spacing () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.spacing; } /// Get current letter spacing.
 
-  /// Set current letter spacing.
-  /// Group: font_stash
-  @property void spacing (float spacing) nothrow @trusted @nogc { pragma(inline, true); getState.spacing = spacing; }
+  @property void blur (float blur) nothrow @trusted @nogc { pragma(inline, true); getState.blur = blur; } /// Set current letter blur.
+  @property float blur () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.blur; } /// Get current letter blur.
 
-  /// Get current letter spacing.
-  /// Group: font_stash
-  @property float spacing () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.spacing; }
+  @property void textAlign (NVGTextAlign talign) nothrow @trusted @nogc { pragma(inline, true); getState.talign = talign; } /// Set current text align.
+  @property NVGTextAlign textAlign () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.talign; } /// Get current text align.
 
-  /// Set current letter blur.
-  /// Group: font_stash
-  @property void blur (float blur) nothrow @trusted @nogc { pragma(inline, true); getState.blur = blur; }
+  @property void fontId (int font) nothrow @trusted @nogc { pragma(inline, true); getState.font = font; } /// Set current font id.
+  @property int fontId () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.font; } /// Get current font id.
 
-  /// Get current letter blur.
-  /// Group: font_stash
-  @property float blur () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.blur; }
-
-  /// Set current text align.
-  /// Group: font_stash
-  @property void textAlign (NVGTextAlign talign) nothrow @trusted @nogc { pragma(inline, true); getState.talign = talign; }
-
-  /// Get current text align.
-  /// Group: font_stash
-  @property NVGTextAlign textAlign () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.talign; }
-
-  /// Set current font id.
-  /// Group: font_stash
-  @property void fontId (int font) nothrow @trusted @nogc { pragma(inline, true); getState.font = font; }
-
-  /// Get current font id.
-  /// Group: font_stash
-  @property int fontId () const pure nothrow @trusted @nogc { pragma(inline, true); return getState.font; }
-
-  /// Set current font using its name.
-  /// Group: font_stash
-  @property void fontId (const(char)[] name) nothrow @trusted @nogc { pragma(inline, true); getState.font = getFontByName(name); }
+  @property void fontId (const(char)[] name) nothrow @trusted @nogc { pragma(inline, true); getState.font = getFontByName(name); } /// Set current font using its name.
 
   /// Check if FontStash has a font with the given name loaded.
-  /// Group: font_stash
   bool hasFont (const(char)[] name) const pure nothrow @trusted @nogc { pragma(inline, true); return (getFontByName(name) >= 0); }
 
   /// Get AA for the current font, or for the specified font.
-  /// Group: font_stash
   bool getFontAA (int font=-1) nothrow @trusted @nogc {
     FONSstate* state = getState;
     if (font < 0) font = state.font;
@@ -10911,10 +10873,9 @@ public:
   }
 
   /// Push current state. Returns `false` if state stack overflowed.
-  /// Group: font_stash
   bool pushState () nothrow @trusted @nogc {
     if (nstates >= FONS_MAX_STATES) {
-      if (handleError !is null) handleError(FONS_STATES_OVERFLOW, 0);
+      if (handleError !is null) handleError(FONSError.StatesOverflow, 0);
       return false;
     }
     if (nstates > 0) {
@@ -10926,10 +10887,9 @@ public:
   }
 
   /// Pop current state. Returns `false` if state stack underflowed.
-  /// Group: font_stash
   bool popState () nothrow @trusted @nogc {
     if (nstates <= 1) {
-      if (handleError !is null) handleError(FONS_STATES_UNDERFLOW, 0);
+      if (handleError !is null) handleError(FONSError.StatesUnderflow, 0);
       return false;
     }
     --nstates;
@@ -10937,7 +10897,6 @@ public:
   }
 
   /// Clear current state (i.e. set it to some sane defaults).
-  /// Group: font_stash
   void clearState () nothrow @trusted @nogc {
     FONSstate* state = getState;
     state.size = 12.0f;
@@ -10962,8 +10921,6 @@ public:
    *
    * Returns:
    *   font id or [FONS_INVALID].
-   *
-   * Group: font_stash
    */
   int addFont (const(char)[] name, const(char)[] path, bool defAA=false) nothrow @trusted {
     if (path.length == 0 || name.length == 0 || strequci(name, NoAlias)) return FONS_INVALID;
@@ -11115,8 +11072,6 @@ public:
    *
    * Returns:
    *   font id or [FONS_INVALID].
-   *
-   * Group: font_stash
    */
   int addFontMem (const(char)[] name, ubyte* data, int dataSize, bool freeData, bool defAA=false) nothrow @trusted @nogc {
     if (data is null || dataSize < 16) return FONS_INVALID;
@@ -11135,8 +11090,6 @@ public:
    *
    * This is more effective (and faster) than reloading fonts, because internally font data
    * is reference counted.
-   *
-   * Group: font_stash
    */
   void addFontsFrom (FONSContext source) nothrow @trusted @nogc {
     if (source is null) return;
@@ -11160,14 +11113,12 @@ public:
 
   /// Returns logical font name corresponding to the given font id, or `null`.
   /// $(WARNING Copy returned name, as name buffer can be invalidated by next FontStash API call!)
-  /// Group: font_stash
   const(char)[] getNameById (int idx) const pure nothrow @trusted @nogc {
     if (idx < 0 || idx >= nfonts || fonts[idx] is null) return null;
     return fonts[idx].name[0..fonts[idx].namelen];
   }
 
   /// Returns font id corresponding to the given logical font name, or [FONS_INVALID].
-  /// Group: font_stash
   int getFontByName (const(char)[] name) const pure nothrow @trusted @nogc {
     //{ import core.stdc.stdio; printf("fonsGetFontByName: [%.*s]\n", cast(uint)name.length, name.ptr); }
     // remove ":noaa" suffix
@@ -11181,8 +11132,6 @@ public:
   /** Measures the specified text string. Parameter bounds should be a float[4],
    * if the bounding box of the text should be returned. The bounds value are [xmin, ymin, xmax, ymax]
    * Returns the horizontal advance of the measured text (i.e. where the next character should drawn).
-   *
-   * Group: font_stash
    */
   float getTextBounds(T) (float x, float y, const(T)[] str, float[] bounds) nothrow @trusted @nogc if (isAnyCharType!T) {
     FONSstate* state = getState;
@@ -11219,12 +11168,12 @@ public:
         }
         codepoint = cast(uint)ch;
       }
-      glyph = getGlyph(font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
+      glyph = getGlyph(font, codepoint, isize, iblur, FONSBitmapFlag.Optional);
       if (glyph !is null) {
         getQuad(font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
         if (q.x1 > maxx) maxx = q.x1;
-        if (params.flags&FONS_ZERO_TOPLEFT) {
+        if (params.isZeroTopLeft) {
           if (q.y0 < miny) miny = q.y0;
           if (q.y1 > maxy) maxy = q.y1;
         } else {
@@ -11263,7 +11212,6 @@ public:
   }
 
   /// Returns various font metrics. Any argument can be `null` if you aren't interested in its value.
-  /// Group: font_stash
   void getVertMetrics (float* ascender, float* descender, float* lineh) nothrow @trusted @nogc {
     FONSstate* state = getState;
     if (state.font < 0 || state.font >= nfonts) {
@@ -11286,7 +11234,6 @@ public:
   }
 
   /// Returns line bounds. Any argument can be `null` if you aren't interested in its value.
-  /// Group: font_stash
   void getLineBounds (float y, float* minyp, float* maxyp) nothrow @trusted @nogc {
     FONSfont* font;
     FONSstate* state = getState;
@@ -11302,7 +11249,7 @@ public:
 
     y += getVertAlign(font, state.talign, isize);
 
-    if (params.flags&FONS_ZERO_TOPLEFT) {
+    if (params.isZeroTopLeft) {
       immutable float miny = y-font.ascender*cast(float)isize/10.0f;
       immutable float maxy = miny+font.lineh*isize/10.0f;
       if (minyp !is null) *minyp = miny;
@@ -11315,8 +11262,7 @@ public:
     }
   }
 
-  /// Returns font line height (without line spacing).
-  /// Group: font_stash
+  /// Returns font line height.
   float fontHeight () nothrow @trusted @nogc {
     float res = void;
     getVertMetrics(null, null, &res);
@@ -11324,7 +11270,6 @@ public:
   }
 
   /// Returns font ascender (positive).
-  /// Group: font_stash
   float fontAscender () nothrow @trusted @nogc {
     float res = void;
     getVertMetrics(&res, null, null);
@@ -11332,7 +11277,6 @@ public:
   }
 
   /// Returns font descender (negative).
-  /// Group: font_stash
   float fontDescender () nothrow @trusted @nogc {
     float res = void;
     getVertMetrics(null, &res, null);
@@ -11364,7 +11308,7 @@ public:
   }
 
   //TODO: document this
-  void errorCallback (void delegate (int error, int val) nothrow @trusted @nogc callback) nothrow @trusted @nogc {
+  void errorCallback (void delegate (FONSError error, int val) nothrow @trusted @nogc callback) nothrow @trusted @nogc {
     handleError = callback;
   }
 
@@ -11524,7 +11468,7 @@ public:
   }
 
   //TODO: document this
-  FONSglyph* getGlyph (FONSfont* font, uint codepoint, short isize, short iblur, FONSglyphBitmap bitmapOption) nothrow @trusted @nogc {
+  FONSglyph* getGlyph (FONSfont* font, uint codepoint, short isize, short iblur, FONSBitmapFlag bitmapOption) nothrow @trusted @nogc {
     static uint fons__hashint() (uint a) pure nothrow @safe @nogc {
       pragma(inline, true);
       a += ~(a<<15);
@@ -11610,7 +11554,7 @@ public:
       if (font.glyphs[i].codepoint == codepoint && font.glyphs[i].size == isize && font.glyphs[i].blur == iblur) {
         glyph = &font.glyphs[i];
         // Negative coordinate indicates there is no bitmap data created.
-        if (bitmapOption == FONS_GLYPH_BITMAP_OPTIONAL || (glyph.x0 >= 0 && glyph.y0 >= 0)) return glyph;
+        if (bitmapOption == FONSBitmapFlag.Optional || (glyph.x0 >= 0 && glyph.y0 >= 0)) return glyph;
         // At this point, glyph exists but the bitmap data is not yet created.
         break;
       }
@@ -11629,12 +11573,12 @@ public:
     int gh = y1-y0+pad*2;
 
     // Determines the spot to draw glyph in the atlas.
-    if (bitmapOption == FONS_GLYPH_BITMAP_REQUIRED) {
+    if (bitmapOption == FONSBitmapFlag.Required) {
       // Find free spot for the rect in the atlas.
       bool added = atlas.addRect(gw, gh, &gx, &gy);
       if (!added && handleError !is null) {
         // Atlas is full, let the user to resize the atlas (or not), and try again.
-        handleError(FONS_ATLAS_FULL, 0);
+        handleError(FONSError.AtlasFull, 0);
         added = atlas.addRect(gw, gh, &gx, &gy);
       }
       if (!added) return null;
@@ -11665,7 +11609,7 @@ public:
     glyph.xoff = cast(short)(x0-pad);
     glyph.yoff = cast(short)(y0-pad);
 
-    if (bitmapOption == FONS_GLYPH_BITMAP_OPTIONAL) return glyph;
+    if (bitmapOption == FONSBitmapFlag.Optional) return glyph;
 
     // Rasterize
     ubyte* dst = &texData[(glyph.x0+pad)+(glyph.y0+pad)*params.width];
@@ -11726,7 +11670,7 @@ public:
     immutable float x1 = cast(float)(glyph.x1-1);
     immutable float y1 = cast(float)(glyph.y1-1);
 
-    if (params.flags&FONS_ZERO_TOPLEFT) {
+    if (params.isZeroTopLeft) {
       immutable float rx = cast(float)cast(int)(*x+xoff);
       immutable float ry = cast(float)cast(int)(*y+yoff);
 
@@ -11788,7 +11732,7 @@ void* fons__tmpalloc (usize size, void* up) nothrow @trusted @nogc {
   // 16-byte align the returned pointer
   size = (size+0xf)&~0xf;
   if (stash.nscratch+cast(int)size > FONS_SCRATCH_BUF_SIZE) {
-    if (stash.handleError !is null) stash.handleError(FONS_SCRATCH_FULL, stash.nscratch+cast(int)size);
+    if (stash.handleError !is null) stash.handleError(FONSError.ScratchFull, stash.nscratch+cast(int)size);
     return null;
   }
   ptr = stash.scratch+stash.nscratch;
@@ -11851,42 +11795,51 @@ uint fons__decutf8 (uint* state, uint* codep, uint byte_) {
 
 
 // ////////////////////////////////////////////////////////////////////////// //
-public struct FonsTextBoundsIterator {
+/// This iterator can be used to do text measurement.
+/// $(WARNING Don't add new fonts to stash while you are iterating, or you WILL get segfault!)
+/// Group: font_stash
+public struct FONSTextBoundsIterator {
 private:
   FONSContext stash;
-  FONSstate* state;
-  uint codepoint;
+  FONSstate state;
+  uint codepoint = 0xFFFD;
   uint utf8state = 0;
-  FONSQuad q;
-  FONSglyph* glyph = null;
   int prevGlyphIndex = -1;
   short isize, iblur;
-  float scale;
+  float scale = 0;
   FONSfont* font;
-  float startx, x, y;
-  float minx, miny, maxx, maxy;
+  float startx = 0, x = 0, y = 0;
+  float minx = 0, miny = 0, maxx = 0, maxy = 0;
+
+private:
+  void clear () nothrow @trusted @nogc {
+    import core.stdc.string : memset;
+    memset(&this, 0, this.sizeof);
+    this.prevGlyphIndex = -1;
+    this.codepoint = 0xFFFD;
+  }
 
 public:
-  this (FONSContext astash, float ax, float ay) nothrow @trusted @nogc { reset(astash, ax, ay); }
+  /// Initialize iterator with the current FontStash state. FontStash state can be changed after initialization without affecting the iterator.
+  this (FONSContext astash, float ax=0, float ay=0) nothrow @trusted @nogc { reset(astash, ax, ay); }
 
-  void reset (FONSContext astash, float ax, float ay) nothrow @trusted @nogc {
-    this = this.init;
-    if (astash is null) return;
+  /// (Re)initialize iterator with the current FontStash state. FontStash state can be changed after initialization without affecting the iterator.
+  void reset (FONSContext astash, float ax=0, float ay=0) nothrow @trusted @nogc {
+    clear();
+
+    if (astash is null || astash.nstates == 0) return;
 
     stash = astash;
-    state = stash.getState;
-    if (state is null) { stash = null; return; } // alas
+    state = *stash.getState;
+
+    if (state.font < 0 || state.font >= stash.nfonts) { clear(); return; }
+    font = stash.fonts[state.font];
+    if (font is null || font.fdata is null) { clear(); return; }
 
     x = ax;
     y = ay;
-
     isize = cast(short)(state.size*10.0f);
     iblur = cast(short)state.blur;
-
-    if (state.font < 0 || state.font >= stash.nfonts) { stash = null; return; }
-    font = stash.fonts[state.font];
-    if (font is null || font.fdata is null) { stash = null; return; }
-
     scale = fons__tt_getPixelHeightScale(&font.font, cast(float)isize/10.0f);
 
     // align vertically
@@ -11895,20 +11848,20 @@ public:
     minx = maxx = x;
     miny = maxy = y;
     startx = x;
-    //assert(prevGlyphIndex == -1);
   }
 
-public:
-  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null); }
+  /// Can this iterator be used?
+  @property bool valid () const pure nothrow @safe @nogc { pragma(inline, true); return (stash !is null); }
 
+  /// Put some text into iterator, calculate new values.
   void put(T) (const(T)[] str...) nothrow @trusted @nogc if (isAnyCharType!T) {
     enum DoCodePointMixin = q{
-      glyph = stash.getGlyph(font, codepoint, isize, iblur, FONS_GLYPH_BITMAP_OPTIONAL);
+      glyph = stash.getGlyph(font, codepoint, isize, iblur, FONSBitmapFlag.Optional);
       if (glyph !is null) {
         stash.getQuad(font, prevGlyphIndex, glyph, isize/10.0f, scale, state.spacing, &x, &y, &q);
         if (q.x0 < minx) minx = q.x0;
         if (q.x1 > maxx) maxx = q.x1;
-        if (stash.params.flags&FONS_ZERO_TOPLEFT) {
+        if (stash.params.isZeroTopLeft) {
           if (q.y0 < miny) miny = q.y0;
           if (q.y1 > maxy) maxy = q.y1;
         } else {
@@ -11921,7 +11874,11 @@ public:
       }
     };
 
-    if (state is null) return; // alas
+    if (stash is null || str.length == 0) return; // alas
+
+    FONSQuad q;
+    FONSglyph* glyph;
+
     static if (is(T == char)) {
       foreach (char ch; str) {
         mixin(DecUtfMixin!("utf8state", "codepoint", "cast(ubyte)ch"));
@@ -11929,7 +11886,6 @@ public:
         mixin(DoCodePointMixin);
       }
     } else {
-      if (str.length == 0) return;
       if (utf8state) {
         utf8state = 0;
         codepoint = 0xFFFD;
@@ -11945,11 +11901,12 @@ public:
     }
   }
 
-  // return current advance
-  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (state !is null ? x-startx : 0); }
+  /// Returns current advance.
+  @property float advance () const pure nothrow @safe @nogc { pragma(inline, true); return (stash !is null ? x-startx : 0); }
 
+  /// Returns current text bounds.
   void getBounds (ref float[4] bounds) const pure nothrow @safe @nogc {
-    if (state is null) { bounds[] = 0; return; }
+    if (stash is null) { bounds[] = 0; return; }
     float lminx = minx, lmaxx = maxx;
     // align horizontally
     if (state.talign.left) {
@@ -11969,9 +11926,9 @@ public:
     bounds[3] = maxy;
   }
 
-  // Returns current horizontal text bounds.
+  /// Returns current horizontal text bounds.
   void getHBounds (out float xmin, out float xmax) nothrow @trusted @nogc {
-    if (state !is null) {
+    if (stash !is null) {
       float lminx = minx, lmaxx = maxx;
       // align horizontally
       if (state.talign.left) {
@@ -11987,15 +11944,38 @@ public:
       }
       xmin = lminx;
       xmax = lmaxx;
+    } else {
+      xmin = xmax = 0;
     }
   }
 
-  // Returns current vertical text bounds.
+  /// Returns current vertical text bounds.
   void getVBounds (out float ymin, out float ymax) nothrow @trusted @nogc {
-    if (state !is null) {
+    pragma(inline, true);
+    if (stash !is null) {
       ymin = miny;
       ymax = maxy;
+    } else {
+      ymin = ymax = 0;
     }
+  }
+
+  /// Returns font line height.
+  float lineHeight () nothrow @trusted @nogc {
+    pragma(inline, true);
+    return (stash !is null ? stash.fonts[state.font].lineh*cast(short)(state.size*10.0f)/10.0f : 0);
+  }
+
+  /// Returns font ascender (positive).
+  float ascender () nothrow @trusted @nogc {
+    pragma(inline, true);
+    return (stash !is null ? stash.fonts[state.font].ascender*cast(short)(state.size*10.0f)/10.0f : 0);
+  }
+
+  /// Returns font descender (negative).
+  float descender () nothrow @trusted @nogc {
+    pragma(inline, true);
+    return (stash !is null ? stash.fonts[state.font].descender*cast(short)(state.size*10.0f)/10.0f : 0);
   }
 }
 

@@ -172,7 +172,7 @@ public:
   int spacesWidth (int count) nothrow @safe @nogc {
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     if (count < 1) return 0;
-    auto it = FonsTextBoundsIterator(fs, 0, 0);
+    auto it = FONSTextBoundsIterator(fs, 0, 0);
     it.put(' ');
     return cast(int)lrintf(it.advance*count);
   }
@@ -184,7 +184,7 @@ public:
     if (!fontWasSet) assert(0, "LayFontStash: font is not set");
     if (w is null && wsp is null && whyph is null) return;
     float minx, maxx;
-    auto it = FonsTextBoundsIterator(fs, 0, 0);
+    auto it = FONSTextBoundsIterator(fs, 0, 0);
     it.put(str);
     if (w !is null) {
       it.getHBounds(minx, maxx);
