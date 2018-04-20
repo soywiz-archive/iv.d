@@ -1162,7 +1162,10 @@ protected:
           if (errno == EINTR) { if (sigsleft-- > 0) { gzclearerr(fl); continue; } }
         }
       }
-      if (res == 0) return (err() ? -1 : 0);
+      if (res == 0) {
+        //{ import core.stdc.stdio; printf("res=0; pos=%u; err=%d\n", cast(uint)newpos, err()); }
+        return (err() ? -1 : 0);
+      }
       newpos += res;
       return res;
     }
