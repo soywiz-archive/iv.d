@@ -648,9 +648,10 @@ struct ModeOptions {
   enum bool3 { def = -1, no = 0, yes = 1 }
   bool3 ignoreCase;
   bool allowPaks;
-  bool allowGZ;
+  bool3 allowGZ;
   bool wantWrite;
-  bool wantWriteOnly;
+  bool wantRead;
+  bool wantAppend;
   private char[16] newmodebuf=0; // 0-terminated
   private int nmblen; // 0 is not included
   @property const(char)[] mode () const pure nothrow @safe @nogc { return newmodebuf[0..nmblen]; }
@@ -658,51 +659,39 @@ struct ModeOptions {
   this (const(char)[] mode) { parse(mode); }
 
   void parse (const(char)[] mode) {
-    bool[128] got;
     nmblen = 0;
     newmodebuf[] = 0;
     allowPaks = true;
-    allowGZ = true;
+    allowGZ = bool3.def;
     wantWrite = false;
-    wantWriteOnly = false;
+    wantRead = false;
     ignoreCase = bool3.def;
+    wantAppend = false;
+    //static if (!VFS_NORMAL_OS) char btm = 'b';
     foreach (char ch; mode) {
-      if (ch < 128 && !got[ch]) {
-        if (ch == 'i') { ignoreCase = bool3.yes; continue; }
-        if (ch == 'I') { ignoreCase = bool3.no; continue; }
-        if (ch == 'X') { allowPaks = false; continue; }
-        if (ch == 'x') { allowPaks = true; continue; }
-        if (ch == 'Z') { allowGZ = false; continue; }
-        if (ch == 'z') { allowGZ = true; continue; }
-        static if (VFS_NORMAL_OS) if (ch == 'b'/* || ch == 't'*/) continue;
-        if (nmblen >= newmodebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-        got[ch] = true;
-        newmodebuf.ptr[nmblen++] = ch;
-      }
+      if (ch == 'i') { ignoreCase = bool3.yes; continue; }
+      if (ch == 'I') { ignoreCase = bool3.no; continue; }
+      if (ch == 'X') { allowPaks = false; continue; }
+      if (ch == 'x') { allowPaks = true; continue; }
+      if (ch == 'Z') { allowGZ = bool3.no; continue; }
+      if (ch == 'z') { allowGZ = bool3.yes; continue; } // force gzip
+      if (ch == 'r' || ch == 'R') { wantRead = true; continue; }
+      if (ch == 'w' || ch == 'W') { wantWrite = true; continue; }
+      if (ch == 'a' || ch == 'A') { wantWrite = true; wantAppend = true; continue; }
+      if (ch == '+') { wantRead = true; wantWrite = true; continue; }
+      if (ch == 'b' || ch == 't') { /*btm = ch;*/ continue; }
     }
+    // fix mode
+    if (!wantRead && !wantWrite) wantRead = true;
+    // build `newmodebuf`
+         if (wantRead && wantWrite && wantAppend) { newmodebuf.ptr[nmblen++] = 'a'; newmodebuf.ptr[nmblen++] = '+'; }
+    else if (wantRead && wantWrite) { newmodebuf.ptr[nmblen++] = 'r'; newmodebuf.ptr[nmblen++] = '+'; }
+    else if (wantRead) newmodebuf.ptr[nmblen++] = 'r';
+    else if (wantWrite) newmodebuf.ptr[nmblen++] = 'w';
+    else assert(0, "internal VFS error");
     // add 'b' for idiotic shitdoze
-    static if (!VFS_NORMAL_OS) {
-      if (!got['b'] && !got['t'] && (got['r'] || got['w'] || got['a'] || got['R'] || got['W'] || got['A'])) {
-        if (nmblen >= newmodebuf.length-1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-        newmodebuf.ptr[nmblen++] = 'b';
-      }
-    }
-    if (nmblen == 0) {
-      if (newmodebuf.length < 2) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-      static if (VFS_NORMAL_OS) {
-        newmodebuf[0..1] = "r";
-        nmblen = 1;
-      } else {
-        newmodebuf[0..2] = "rb";
-        nmblen = 2;
-      }
-    }
-    if (newmodebuf.length-nmblen < 1) throw new VFSException("invalid mode '"~mode.idup~"' (too long)");
-    foreach (char ch; newmodebuf[0..nmblen]) {
-      if (ch == 'a' || ch == 'A' || ch == 'w' || ch == 'W' || ch == '+' || ch == 't') wantWrite = true;
-      if (ch == 'w' || ch == 'W') wantWriteOnly = true;
-    }
-    //newmodebuf[nmblen++] = '\0';
+    static if (!VFS_NORMAL_OS) newmodebuf.ptr[nmblen++] = 'b';
+    newmodebuf[nmblen++] = '\0';
   }
 }
 
@@ -755,19 +744,33 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
 
     // try ".gz"
     //TODO: transparently read gzipped files from archives
-    if (mopt.allowGZ && !mopt.wantWrite) {
-      int epe = cast(int)fname.length;
-      while (epe > 1 && fname[epe-1] != '.') --epe;
-      if (fname.length-epe == 2 && (fname[epe] == 'G' || fname[epe] == 'g') && (fname[epe+1] == 'Z' || fname[epe+1] == 'z')) {
-        //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("TRYING GZ: '%.*s'\n", cast(int)fname.length, fname.ptr); }
+    if (mopt.allowGZ != ModeOptions.bool3.no && !mopt.wantWrite) {
+      if (mopt.allowGZ == ModeOptions.bool3.yes) {
         import etc.c.zlib;
         import std.internal.cstring;
         gzFile gf = gzopen(fname[].tempCString, "rb");
-        if (gf !is null) return VFile.OpenGZ(gf, fname[0..epe-1]);
+        if (gf !is null) return VFile.OpenGZ(gf, fname);
+      } else {
+        int epe = cast(int)fname.length;
+        while (epe > 1 && fname[epe-1] != '.') --epe;
+        if (fname.length-epe == 2 && (fname[epe] == 'G' || fname[epe] == 'g') && (fname[epe+1] == 'Z' || fname[epe+1] == 'z')) {
+          //{ import core.stdc.stdio : stderr, fprintf; stderr.fprintf("TRYING GZ: '%.*s'\n", cast(int)fname.length, fname.ptr); }
+          import etc.c.zlib;
+          import std.internal.cstring;
+          gzFile gf = gzopen(fname[].tempCString, "rb");
+          if (gf !is null) return VFile.OpenGZ(gf, fname[0..epe-1]);
+        }
       }
     }
 
-    if (!mopt.wantWriteOnly) {
+    if (mopt.allowGZ == ModeOptions.bool3.yes && mopt.wantWrite) {
+      import etc.c.zlib;
+      import std.internal.cstring;
+      gzFile gf = gzopen(fname[].tempCString, (mopt.wantRead ? "r+\0" : "w\0").ptr);
+      if (gf !is null) return VFile.OpenGZ(gf, fname);
+    }
+
+    if (mopt.wantRead) {
       auto lock = vfsLockIntr();
       cleanupDrivers();
       // try all drivers
@@ -777,8 +780,8 @@ public VFile vfsOpenFile(T:const(char)[], bool usefname=true) (T fname, const(ch
           if (!mopt.wantWrite || !di.drv.isDisk) {
             auto fl = di.drv.tryOpen(fname, ignoreCase);
             if (fl.isOpen) {
-              if (di.temp) di.tempUsedTime = MonoTime.currTime;
               if (mopt.wantWrite) errorfn("can't open file '!' in non-binary non-readonly mode");
+              if (di.temp) di.tempUsedTime = MonoTime.currTime;
               return fl;
             }
           }
