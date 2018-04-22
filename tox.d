@@ -23,7 +23,7 @@
  */
 module iv.tox /*is aliced*/;
 pragma(lib, "toxcore");
-pragma(lib, "toxencryptsave");
+//pragma(lib, "toxencryptsave");
 pragma(lib, "sodium"); // for static linking
 import iv.alice;
 // WARNING: functions with callbacks (and callbacks 'emselves) will be marked `@system`!
