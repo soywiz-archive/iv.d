@@ -260,6 +260,21 @@ uint murHash32(T) (const(T)[] data, uint seed=0) pure nothrow @trusted @nogc if 
 }
 
 
+/**
+ * MurmurHash3 was written by Austin Appleby, and is placed in the public domain.
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ *
+ * Returns:
+ *   32-bit hash
+ */
+uint murHash32(T) (const(T)[] data, uint seed=0) pure nothrow @trusted @nogc if (T.sizeof > 1) {
+  return murHash32((cast(const(ubyte)*)buf.ptr)[0..buf.length*T.sizeof]);
+}
+
+
 version(iv_hash_unittest) unittest {
   // wow, we can do this in compile time!
   static assert(murHash32("Alice & Miriel") == 0x295db5e7u);

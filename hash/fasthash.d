@@ -208,6 +208,33 @@ uint fastHash32(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.s
 }
 
 
+/**
+ * 64-bit implementation of fasthash
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ */
+ulong fastHash64(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.sizeof > 1) {
+  auto hh = FastHash(seed);
+  hh.put((cast(const(ubyte)*)buf.ptr)[0..buf.length*T.sizeof]);
+  return hh.result64;
+}
+
+/**
+ * 32-bit implementation of fasthash
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ */
+uint fastHash32(T) (const(T)[] buf, ulong seed=0) nothrow @trusted @nogc if (T.sizeof > 1) {
+  auto hh = FastHash(seed);
+  hh.put((cast(const(ubyte)*)buf.ptr)[0..buf.length*T.sizeof]);
+  return hh.result32;
+}
+
+
 version(iv_hash_unittest) unittest {
   static assert(fastHash32("Alice & Miriel") == 0x4773e2a3U);
   static assert(fastHash64("Alice & Miriel") == 0xfa02b41e417696c1UL);

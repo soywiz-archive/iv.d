@@ -115,6 +115,20 @@ uint joaatHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.s
 }
 
 
+/**
+ * 32-bit implementation of joaathash
+ *
+ * Params:
+ *   buf =  data buffer
+ *   seed = the seed
+ */
+uint joaatHash32(T) (const(T)[] buf, uint seed=0) nothrow @trusted @nogc if (T.sizeof > 1) {
+  auto hh = JoaatHash(seed);
+  hh.put((cast(const(ubyte)*)buf.ptr)[0..buf.length*T.sizeof]);
+  return hh.result32;
+}
+
+
 version(iv_hash_unittest) unittest {
   version(JoaatMixLength) {
     enum HashValue = 0x17fa5136U;

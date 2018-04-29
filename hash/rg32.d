@@ -498,9 +498,16 @@ static:
 }
 
 
-ubyte[RG32Hash.ByteSize] RG32HashOf(T) (const(T)[] data) if (T.sizeof == 1) {
+ubyte[RG32Hash.ByteSize] RG32HashOf(T) (const(T)[] data) nothrow @trusted @nogc if (T.sizeof == 1) {
   RG32Hash h;
   h.put(data);
+  return h.finish();
+}
+
+
+ubyte[RG32Hash.ByteSize] RG32HashOf(T) (const(T)[] data) nothrow @trusted @nogc if (T.sizeof > 1) {
+  RG32Hash h;
+  h.put((cast(const(ubyte)*)data.ptr)[0..data.length*T.sizeof]);
   return h.finish();
 }
 
