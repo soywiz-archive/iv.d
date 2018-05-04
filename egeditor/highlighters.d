@@ -2844,7 +2844,7 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
   if (ext.strEquCI(".c") || ext.strEquCI(".cpp") ||
       ext.strEquCI(".h") || ext.strEquCI(".hpp") ||
       ext.strEquCI(".hxx") || ext.strEquCI(".cxx") ||
-      ext.strEquCI(".cc"))
+      ext.strEquCI(".cc") || ext.strEquCI(".uc") || ext.strEquCI(".vc"))
   {
     __gshared EdHiTokensC toksc;
     if (toksc is null) toksc = new EdHiTokensC();
