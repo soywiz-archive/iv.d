@@ -1191,11 +1191,11 @@ public class EdHiTokensD : EdHiTokens {
     addToken("/", HiPunct);
     addToken("%", HiPunct);
     addToken("..", HiPunct);
-    addToken("...", HiPunct);
+    addToken("...", HiKeywordHi);
     addToken("&", HiPunct);
-    addToken("&&", HiPunct);
+    addToken("&&", HiSpecial);
     addToken("|", HiPunct);
-    addToken("||", HiPunct);
+    addToken("||", HiSpecial);
     addToken("[]", HiPunct);
     addToken("&", HiPunct);
     addToken("*", HiPunct);
@@ -1440,7 +1440,7 @@ public class EdHiTokensC : EdHiTokens {
 
     addToken("!", HiPunct);
     addToken("%", HiPunct);
-    addToken("&&", HiPunct);
+    addToken("&&", HiSpecial);
     addToken("&", HiPunct);
     addToken("(", HiPunct);
     addToken(")", HiPunct);
@@ -1459,7 +1459,7 @@ public class EdHiTokensC : EdHiTokens {
     addToken("]", HiPunct);
     addToken("^", HiPunct);
     addToken("{", HiPunct);
-    addToken("||", HiPunct);
+    addToken("||", HiSpecial);
     addToken("|", HiPunct);
     addToken("}", HiPunct);
     addToken("~", HiPunct);
@@ -1565,7 +1565,7 @@ public class EdHiTokensZS : EdHiTokens {
 
     addToken("!", HiPunct);
     addToken("%", HiPunct);
-    addToken("&&", HiPunct);
+    addToken("&&", HiSpecial);
     addToken("&", HiPunct);
     addToken("(", HiPunct);
     addToken(")", HiPunct);
@@ -1584,7 +1584,7 @@ public class EdHiTokensZS : EdHiTokens {
     addToken("]", HiPunct);
     addToken("^", HiPunct);
     addToken("{", HiPunct);
-    addToken("||", HiPunct);
+    addToken("||", HiSpecial);
     addToken("|", HiPunct);
     addToken("}", HiPunct);
     addToken("~", HiPunct);
@@ -1618,7 +1618,7 @@ public class EdHiTokensVC : EdHiTokens {
       Opt.Num0b|
       Opt.Num0o|
       Opt.Num0x|
-      //Opt.NumAllowUnder|
+      Opt.NumAllowUnder|
       //Opt.NumAllowSign|
       Opt.SQString|
       Opt.DQString|
@@ -1644,53 +1644,74 @@ public class EdHiTokensVC : EdHiTokens {
       0
     );
 
+    addToken("alias", HiKeyword);
+    addToken("auto", HiKeyword);
+    addToken("bitenum", HiKeyword);
     addToken("break", HiKeyword);
     addToken("case", HiKeyword);
-    addToken("const", HiKeyword);
+    addToken("cast", HiKeywordHi);
+    addToken("class", HiKeywordHi);
+    addToken("const", HiKeywordHi);
     addToken("continue", HiKeyword);
+    addToken("default", HiKeyword);
+    addToken("delegate", HiKeyword);
     addToken("do", HiKeyword);
     addToken("else", HiKeyword);
     addToken("enum", HiKeyword);
-    //addToken("extern", HiKeyword);
-    addToken("foreach", HiKeyword);
     addToken("for", HiKeyword);
-    //addToken("goto", HiKeyword);
+    addToken("foreach", HiKeyword);
+    addToken("get", HiKeywordHi);
+    addToken("goto", HiKeyword);
     addToken("if", HiKeyword);
+    addToken("import", HiInternal);
+    addToken("inline", HiInternal); // not yet, so internal
+    addToken("isa", HiSpecial);
     addToken("return", HiKeyword);
-    //addToken("short", HiKeyword);
-    addToken("sizeof", HiKeyword);
-    addToken("static", HiKeyword);
+    addToken("scope", HiInternal); // not yet, so internal
+    addToken("set", HiKeywordHi);
+    addToken("sizeof", HiInternal); // not yet, so internal
     addToken("struct", HiKeyword);
     addToken("switch", HiKeyword);
-    //addToken("typedef", HiKeyword);
-    //addToken("union", HiKeyword);
-    //addToken("volatile", HiKeyword);
     addToken("while", HiKeyword);
-    //addToken("asm", HiKeyword);
-    //addToken("inline", HiKeyword);
-    addToken("...", HiKeyword);
-    addToken("class", HiKeyword);
-    addToken("protected", HiKeyword);
+
+    addToken("abstract", HiInternal);
+    addToken("final", HiInternal);
+    addToken("iterator", HiInternal);
+    addToken("native", HiInternal);
+    addToken("override", HiKeyword);
     addToken("private", HiKeyword);
-    addToken("readonly", HiKeyword);
+    addToken("protected", HiKeyword);
     addToken("public", HiKeyword);
-    addToken("default", HiKeyword);
-    addToken("auto", HiKeyword);
-    //addToken("using", HiKeyword);
-    addToken("import", HiKeyword);
-    //addToken("try", HiKeyword);
-    //addToken("catch", HiKeyword);
-    //addToken("throw", HiKeyword);
-    //addToken("virtual", HiKeyword);
-    //addToken("override", HiKeyword);
+    addToken("readonly", HiKeyword);
+    addToken("spawner", HiKeywordHi);
+    addToken("static", HiKeyword);
+
+    addToken("reliable", HiKeywordHi);
+    addToken("replication", HiKeywordHi);
+    addToken("states", HiKeywordHi);
+    addToken("transient", HiKeywordHi);
+    addToken("unreliable", HiKeywordHi);
+    addToken("defaultproperties", HiKeywordHi);
+
 
     addToken("true", HiKeyword);
     addToken("false", HiKeyword);
 
+    //addToken("none", HiUDA);
+
+    addToken("ref", HiSpecial);
+    addToken("out", HiSpecial);
+    addToken("optional", HiSpecial);
+
+    addToken("...", HiKeywordHi);
+    addToken("->", HiInternal);
+    addToken("&&", HiSpecial);
+    addToken("||", HiSpecial);
+    addToken("..", HiPunct);
     addToken("!", HiPunct);
     addToken("%", HiPunct);
-    addToken("&&", HiPunct);
     addToken("&", HiPunct);
+    addToken("$", HiSpecial);
     addToken("(", HiPunct);
     addToken(")", HiPunct);
     addToken("*", HiPunct);
@@ -1708,37 +1729,29 @@ public class EdHiTokensVC : EdHiTokens {
     addToken("]", HiPunct);
     addToken("^", HiPunct);
     addToken("{", HiPunct);
-    addToken("||", HiPunct);
     addToken("|", HiPunct);
     addToken("}", HiPunct);
     addToken("~", HiPunct);
     addToken(".", HiPunct);
-    addToken("->", HiInternal);
 
+    addToken("NULL", HiInternal);
     addToken("null", HiInternal);
-    //addToken("new", HiInternal);
+    addToken("nullptr", HiInternal);
+    addToken("none", HiInternal);
     addToken("self", HiInternal);
-    addToken("super", HiInternal);
+    addToken("delete", HiInternal);
 
-    addToken("native", HiInternal);
-    addToken("abstract", HiInternal);
-    addToken("final", HiInternal);
-    addToken("static", HiKeyword);
 
     addToken("void", HiType);
-    //addToken("short", HiType);
     addToken("int", HiType);
-    //addToken("long", HiType);
     addToken("float", HiType);
-    //addToken("double", HiType);
-    //addToken("char", HiType);
-    //addToken("let", HiType);
     addToken("bool", HiType);
     addToken("string", HiType);
     addToken("name", HiType);
     addToken("vector", HiType);
     addToken("byte", HiType);
     addToken("array", HiType);
+    addToken("state", HiType);
   }
 }
 
@@ -1879,7 +1892,7 @@ public class EdHiTokensFrag : EdHiTokens {
 
     addToken("!", HiPunct);
     addToken("%", HiPunct);
-    addToken("&&", HiPunct);
+    addToken("&&", HiSpecial);
     addToken("&", HiPunct);
     addToken("(", HiPunct);
     addToken(")", HiPunct);
@@ -1898,7 +1911,7 @@ public class EdHiTokensFrag : EdHiTokens {
     addToken("]", HiPunct);
     addToken("^", HiPunct);
     addToken("{", HiPunct);
-    addToken("||", HiPunct);
+    addToken("||", HiSpecial);
     addToken("|", HiPunct);
     addToken("}", HiPunct);
     addToken("~", HiPunct);
@@ -2923,9 +2936,9 @@ public class EdHiTokensMES : EdHiTokens {
     addToken("..", HiPunct);
     addToken("...", HiPunct);
     addToken("&", HiPunct);
-    addToken("&&", HiPunct);
+    addToken("&&", HiSpecial);
     addToken("|", HiPunct);
-    addToken("||", HiPunct);
+    addToken("||", HiSpecial);
     addToken("[]", HiPunct);
     addToken("&", HiPunct);
     addToken("*", HiPunct);
