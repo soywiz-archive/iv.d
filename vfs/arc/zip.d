@@ -293,7 +293,7 @@ private:
         fi.method = cdfh.method;
         fi.modtime = cdfh.modtime;
         if (cdfh.method == 0) fi.pksize = fi.size;
-        // now, this is valid file, so read it's name
+        // now, this is valid file, so read its name
         if (fl.rawRead(namebuf[0..cdfh.namelen]).length != cdfh.namelen) throw new /*VFSNamedException!"ZipArchive"*/VFSExceptionArc("reading error");
         auto nb = new char[](prefixpath.length+cdfh.namelen);
         usize nbpos = prefixpath.length;
