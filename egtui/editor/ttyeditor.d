@@ -1942,8 +1942,82 @@ final:
     return true;
   }
 
+  // skip current line
+  int vchGotoLineStart (int pos) {
+    if (pos < 0) return 0;
+    while (pos > 0 && gb[pos-1] != '\n') --pos;
+    return pos;
+  }
+
+  int vchGotoPrevLine (int pos) {
+    pos = vchGotoLineStart(pos);
+    return vchGotoLineStart(pos-1);
+  }
+
+  // skip current line
+  int vchGotoSkipLine (int pos) {
+    // go to line end
+    while (pos < gb.textsize && gb[pos] != '\n') --pos;
+    // skip '\n'
+    if (pos < gb.textsize) ++pos;
+    return pos;
+  }
+
+  // good comment for VaVoom header?
+  bool isCurLineAGoodVCHComment (int pos) {
+    pos = vchGotoLineStart(pos);
+    // skip blanks
+    while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
+    // check for single-line comment
+    if (pos+2 >= gb.textsize) return false;
+    if (gb[pos] != '/' || gb[pos+1] != '/' || gb[pos+2] == '/') return false;
+    pos += 2; // skip comment
+    // check if we have any non-blank chars in it
+    while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
+    return (pos < gb.textsize && gb[pos] > ' ');
+  }
+
+  // remove extra blanks (and insert required blanks) to good comment
+  // WARNING! comment MUST be good
+  // curpos must be at comment start, and will be on the next line
+  void fixAGoodVCHCommentAndSkipIt () {
+    auto pos = curpos;
+    // delete leading spaces
+    while (gb[pos] != '/') ++pos;
+    if (pos > curpos) deleteText!"start"(curpos, pos-curpos);
+    // skip '//'
+    pos = curpos+2;
+    // we should have exactly two spaces after '//'
+    if (gb[pos] > ' ') {
+      // insert two
+      insertText!("end", false)(pos, "  ");
+    } else if (gb[pos+1] > ' ') {
+      // insert one
+      insertText!("end", false)(pos+1, " ");
+    } else if (gb[pos+2] <= ' ') {
+      // have more remove extra
+      pos += 2;
+      int epos = pos+1;
+      while (gb[epos] <= ' ') ++epos;
+      deleteText!"start"(pos, epos-pos);
+    }
+    // skip line
+    pos = curpos;
+    while (gb[pos] != '\n') ++pos;
+    gotoPos(pos+1);
+  }
+
+  // BUG: char at EOT is invalid
+  bool vchCheckWord (int pos, string word) {
+    if (word.length == 0 || pos >= gb.textsize) return false;
+    if (isShitPPWordChar(gb[pos+cast(int)word.length])) return false;
+    foreach (int f; 0..cast(int)word.length) if (gb[pos+f] != word[f]) return false;
+    return true;
+  }
+
   void doGenVaVoomCmt () {
     auto pos = curpos;
+    if (isCurLineAGoodVCHComment(pos)) { ttyBeep(); return; } // invalid
     // find identifier start (including '::' for shitpp)
     while (pos >= 0) {
       if (gb[pos] == ':') {
@@ -1986,6 +2060,7 @@ final:
     scope(exit) delete id;
     id.reserve(epos-pos+127);
     foreach (auto f; pos..epos) id ~= gb[f];
+    if (id == "virtual" || id == "override") { ttyBeep(); return; } // invalid
     // if this is `operator`, collect operator name too
     if (id == "operator" || id.endsWith("::operator")) {
       auto xxpos = epos;
@@ -2017,8 +2092,10 @@ final:
     cutline ~= "//";
     while (cutline.length < 76) cutline ~= '=';
     cutline ~= '\n';
-    // insert cutline (no indent)
-    //insertText!("end", false)(pos, cutline); pos = curpos;
+    // skip good comments that we will add to header
+    while (curpos > 0 && isCurLineAGoodVCHComment(vchGotoPrevLine(curpos))) {
+      gotoPos(vchGotoPrevLine(curpos));
+    }
     // insert cutline (no indent)
     doPutText(cutline);
     // insert second line
@@ -2028,10 +2105,32 @@ final:
     doPutText(id);
     // finish third line, insert fourth line
     doPutText("\n//\n");
+    // skip and normalize good comments
+    if (isCurLineAGoodVCHComment(curpos)) {
+      while (isCurLineAGoodVCHComment(curpos)) fixAGoodVCHCommentAndSkipIt();
+      // and insert "nice line"
+      doPutText("//\n");
+    }
     // insert final line
     doPutText(cutline);
     // back to identifier, so we can pretend that no cursor movement happened
     gotoPos(curpos+xpos);
+    // now do some cosmetic: remove leading spaces, remove `virtual`
+    pos = vchGotoLineStart(curpos);
+    epos = pos;
+    // it is safe to assume that we have non-blank chars here
+    while (epos < gb.textsize && gb[epos] <= ' ') ++epos;
+    // check if we have "virtual"
+    if (vchCheckWord(epos, "virtual")) {
+      // skip it
+      epos += 7;
+      // it is safe to assume that we have non-blank chars here
+      while (epos < gb.textsize && gb[epos] <= ' ') ++epos;
+    }
+    if (epos > pos) {
+      gotoPos(curpos-(epos-pos));
+      deleteText!"none"(pos, epos-pos);
+    }
   }
 
   void doGenCmtTearLine () {
