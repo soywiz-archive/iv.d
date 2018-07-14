@@ -1749,9 +1749,13 @@ public class EdHiTokensVC : EdHiTokens {
     addToken("string", HiType);
     addToken("name", HiType);
     addToken("vector", HiType);
-    addToken("byte", HiType);
+    addToken("ubyte", HiType);
     addToken("array", HiType);
     addToken("state", HiType);
+
+    // reserved, unused
+    addToken("byte", HiInternal);
+    addToken("uint", HiInternal);
   }
 }
 
