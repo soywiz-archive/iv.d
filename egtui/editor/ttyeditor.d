@@ -1363,6 +1363,7 @@ public:
   }
 
   bool processKey (TtyEvent key) {
+    //{ import core.stdc.stdio : stderr, fprintf; auto st = key.toString(); fprintf(stderr, "{%.*s}", cast(uint)st.length, st.ptr); }
     // hack it here, so it won't interfere with normal keyboard processing
     if (pasteModeCounter) { addToPasteCollector(key); return true; }
     if (key.key == TtyEvent.Key.PasteStart) { /*doPasteStart();*/ addToPasteCollector(key); return true; }
@@ -1919,6 +1920,144 @@ final:
     gotoPos(pos);
   }
 
+  static bool isShitPPWordChar (char ch) {
+    // '$' should come in too, but meh...
+    return
+      (ch >= 'A' && ch <= 'Z') ||
+      (ch >= 'a' && ch <= 'z') ||
+      (ch >= '0' && ch <= '9') ||
+      ch == '_';
+  }
+
+  // pos must be on ':', or this returns `false`
+  bool isGoodDColonAt (int pos) {
+    if (pos < 0 || pos >= gb.textsize) return false;
+    if (gb[pos] != ':') return false;
+    // if we are at 2nd (or more) colon, move to the first one
+    if (pos > 0 && gb[pos-1] == ':') --pos;
+    // now we should be at the first ':' in '::', check for valid position
+    if (pos < 1 || pos+2 >= gb.textsize || gb[pos+1] != ':') return false; // not a '::', or invalid pos
+    if (!isShitPPWordChar(gb[pos-1])) return false; // invalid boundaries
+    if (!isShitPPWordChar(gb[pos+2]) && gb[pos+2] != '~') return false; // invalid boundaries (special '~' for dtors)
+    return true;
+  }
+
+  void doGenVaVoomCmt () {
+    auto pos = curpos;
+    // find identifier start (including '::' for shitpp)
+    while (pos >= 0) {
+      if (gb[pos] == ':') {
+        if (!isGoodDColonAt(pos)) { ttyBeep(); return; } // invalid
+      } else {
+        if (!isShitPPWordChar(gb[pos])) {
+          // special for dtors
+          if (gb[pos] == '~') {
+            if (pos < 3 || gb[pos-1] != ':' || gb[pos-2] != ':') break;
+            pos -= 1; // skip to '::' start (the following `--` will do the second move)
+          } else {
+            break;
+          }
+        }
+      }
+      --pos;
+    }
+    ++pos;
+    // find identifier end
+    auto epos = curpos;
+    while (epos < gb.textsize) {
+      if (gb[epos] == ':') {
+        if (!isGoodDColonAt(epos)) { ttyBeep(); return; } // invalid
+      } else {
+        if (!isShitPPWordChar(gb[epos])) {
+          // special for dtors
+          if (gb[pos] == '~') {
+            if (pos < 3 || gb[pos-1] != ':' || gb[pos-2] != ':') break;
+            epos += 1; // skip to '::' end (the following `++` will do the second move)
+          } else {
+            break;
+          }
+        }
+      }
+      ++epos;
+    }
+    if (epos == pos) { ttyBeep(); return; } // invalid
+    // [pos..epos) is our identifier; copy it into temp array
+    char[] id;
+    scope(exit) delete id;
+    id.reserve(epos-pos+127);
+    foreach (auto f; pos..epos) id ~= gb[f];
+    // if this is `operator`, collect operator name too
+    if (id == "operator" || id.endsWith("::operator")) {
+      auto xxpos = epos;
+      while (epos < gb.textsize && gb[epos] != '\n' && gb[epos] <= ' ') ++epos;
+      // is this '()'?
+      if (epos+1 <= gb.textsize && gb[epos] == '(' && gb[epos+1] == ')') {
+        epos += 2;
+      } else {
+        // find '('
+        while (epos < gb.textsize && gb[epos] != '\n' && gb[epos] != '(') ++epos;
+      }
+      // remove trailing spaces
+      while (epos > xxpos && gb[epos-1] <= ' ') --epos;
+      // append collected chars
+      while (xxpos < epos) id ~= gb[xxpos++];
+    }
+    // start undo group, so undo will remove the whole header at once
+    undoGroupStart();
+    scope(exit) undoGroupEnd();
+    bool closeGroup = false;
+    // move to line start (and save xpos)
+    while (pos > 0 && gb[pos-1] != '\n') --pos;
+    int xpos = curpos-pos;
+    gotoPos(pos);
+    // create cutline
+    char[] cutline;
+    scope(exit) delete cutline;
+    cutline.reserve(80);
+    cutline ~= "//";
+    while (cutline.length < 76) cutline ~= '=';
+    cutline ~= '\n';
+    // insert cutline (no indent)
+    //insertText!("end", false)(pos, cutline); pos = curpos;
+    // insert cutline (no indent)
+    doPutText(cutline);
+    // insert second line
+    doPutText("//\n");
+    // build third line
+    doPutText("//  ");
+    doPutText(id);
+    // finish third line, insert fourth line
+    doPutText("\n//\n");
+    // insert final line
+    doPutText(cutline);
+    // back to identifier, so we can pretend that no cursor movement happened
+    gotoPos(curpos+xpos);
+  }
+
+  void doGenCmtTearLine () {
+    auto pos = curpos;
+    // start undo group, so undo will remove the whole header at once
+    undoGroupStart();
+    scope(exit) undoGroupEnd();
+    bool closeGroup = false;
+    // move to line start (and save xpos)
+    while (pos > 0 && gb[pos-1] != '\n') --pos;
+    int xpos = curpos-pos;
+    gotoPos(pos);
+    // create tearline
+    char[] tearline;
+    scope(exit) delete tearline;
+    tearline.reserve(90);
+    while (tearline.length < 80) tearline ~= '/';
+    tearline[2] = ' ';
+    tearline[$-3] = ' ';
+    tearline ~= '\n';
+    // insert tearline
+    doPutText(tearline);
+    // back to identifier, so we can pretend that no cursor movement happened
+    gotoPos(curpos+xpos);
+  }
+
 final:
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("Up", q{ doUp(); });
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-Up", q{ doUp(true); });
@@ -2076,6 +2215,14 @@ final:
     // get current word
     doNextIncSearch();
   });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-H", "generate VaVoom function header comment", q{ doGenVaVoomCmt(); });
+  // hack for idiotic terminal mapping
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q Backspace", "generate VaVoom function header comment", q{ doGenVaVoomCmt(); });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-M", "put comment tearline", q{ doGenCmtTearLine(); });
+  // hack for idiotic terminal mapping
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q Enter", "put comment tearline", q{ doGenCmtTearLine(); });
 
   mixin TEDImpl!("C-Q C-K", "go to block end", q{ if (hasMarkedBlock) gotoPos!true(bend); lastBGEnd = true; });
   mixin TEDImpl!("C-Q C-T", "set tab size", q{
