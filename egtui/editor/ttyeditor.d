@@ -2044,8 +2044,8 @@ final:
       } else {
         if (!isShitPPWordChar(gb[epos])) {
           // special for dtors
-          if (gb[pos] == '~') {
-            if (pos < 3 || gb[pos-1] != ':' || gb[pos-2] != ':') break;
+          if (gb[epos] == '~') {
+            if (epos < 3 || gb[epos-1] != ':' || gb[epos-2] != ':') break;
             epos += 1; // skip to '::' end (the following `++` will do the second move)
           } else {
             break;
