@@ -667,7 +667,7 @@ struct ModeOptions {
     wantRead = false;
     ignoreCase = bool3.def;
     wantAppend = false;
-    bool wasWrite = false; // "w+" should not be turned to "r+"
+    bool hasPlus = false;
     //static if (!VFS_NORMAL_OS) char btm = 'b';
     foreach (char ch; mode) {
       if (ch == 'i') { ignoreCase = bool3.yes; continue; }
@@ -677,22 +677,25 @@ struct ModeOptions {
       if (ch == 'Z') { allowGZ = bool3.no; continue; }
       if (ch == 'z') { allowGZ = bool3.yes; continue; } // force gzip
       if (ch == 'r' || ch == 'R') { wantRead = true; continue; }
-      if (ch == 'w' || ch == 'W') { wantWrite = true; wasWrite = true; continue; }
-      if (ch == 'a' || ch == 'A') { wantWrite = true; wantAppend = true; continue; }
-      if (ch == '+') { wantRead = true; wantWrite = true; continue; }
-      if (ch == 'b' || ch == 't') { /*btm = ch;*/ continue; }
+      if (ch == 'w' || ch == 'W') { wantWrite = true; continue; }
+      if (ch == 'a' || ch == 'A') { wantAppend = true; continue; }
+      if (ch == '+') { hasPlus = true; continue; }
+      if (ch == 'b' || ch == 't' || ch == 'B' || ch == 'T') { /*btm = ch;*/ continue; }
     }
     // fix mode
-    if (!wantRead && !wantWrite) wantRead = true;
+    if (wantRead && wantWrite) hasPlus = true;
+    if (!wantRead && !wantWrite && !wantAppend) wantRead = true;
     // build `newmodebuf`
-         if (wantRead && wantWrite && wantAppend) { newmodebuf.ptr[nmblen++] = 'a'; newmodebuf.ptr[nmblen++] = '+'; }
-    else if (wantRead && wantWrite) { newmodebuf.ptr[nmblen++] = (wasWrite ? 'w' : 'r'); newmodebuf.ptr[nmblen++] = '+'; }
-    else if (wantRead) newmodebuf.ptr[nmblen++] = 'r';
-    else if (wantWrite) newmodebuf.ptr[nmblen++] = 'w';
+         if (wantAppend) { newmodebuf.ptr[nmblen++] = 'a'; if (hasPlus) newmodebuf.ptr[nmblen++] = '+'; }
+    else if (wantWrite) { newmodebuf.ptr[nmblen++] = 'w'; if (hasPlus) newmodebuf.ptr[nmblen++] = '+'; }
+    else if (wantRead) { newmodebuf.ptr[nmblen++] = 'r'; if (hasPlus) newmodebuf.ptr[nmblen++] = '+'; }
     else assert(0, "internal VFS error");
     // add 'b' for idiotic shitdoze
     static if (!VFS_NORMAL_OS) newmodebuf.ptr[nmblen++] = 'b';
     newmodebuf[nmblen++] = '\0';
+    // fix flags
+    if (hasPlus) { wantRead = true; wantWrite = true; }
+    if (wantAppend) wantWrite = true;
   }
 }
 
