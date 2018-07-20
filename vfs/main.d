@@ -667,6 +667,7 @@ struct ModeOptions {
     wantRead = false;
     ignoreCase = bool3.def;
     wantAppend = false;
+    bool wasWrite = false; // "w+" should not be turned to "r+"
     //static if (!VFS_NORMAL_OS) char btm = 'b';
     foreach (char ch; mode) {
       if (ch == 'i') { ignoreCase = bool3.yes; continue; }
@@ -676,7 +677,7 @@ struct ModeOptions {
       if (ch == 'Z') { allowGZ = bool3.no; continue; }
       if (ch == 'z') { allowGZ = bool3.yes; continue; } // force gzip
       if (ch == 'r' || ch == 'R') { wantRead = true; continue; }
-      if (ch == 'w' || ch == 'W') { wantWrite = true; continue; }
+      if (ch == 'w' || ch == 'W') { wantWrite = true; wasWrite = true; continue; }
       if (ch == 'a' || ch == 'A') { wantWrite = true; wantAppend = true; continue; }
       if (ch == '+') { wantRead = true; wantWrite = true; continue; }
       if (ch == 'b' || ch == 't') { /*btm = ch;*/ continue; }
@@ -685,7 +686,7 @@ struct ModeOptions {
     if (!wantRead && !wantWrite) wantRead = true;
     // build `newmodebuf`
          if (wantRead && wantWrite && wantAppend) { newmodebuf.ptr[nmblen++] = 'a'; newmodebuf.ptr[nmblen++] = '+'; }
-    else if (wantRead && wantWrite) { newmodebuf.ptr[nmblen++] = 'r'; newmodebuf.ptr[nmblen++] = '+'; }
+    else if (wantRead && wantWrite) { newmodebuf.ptr[nmblen++] = (wasWrite ? 'w' : 'r'); newmodebuf.ptr[nmblen++] = '+'; }
     else if (wantRead) newmodebuf.ptr[nmblen++] = 'r';
     else if (wantWrite) newmodebuf.ptr[nmblen++] = 'w';
     else assert(0, "internal VFS error");
