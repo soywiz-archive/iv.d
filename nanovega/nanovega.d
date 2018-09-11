@@ -13649,19 +13649,19 @@ void glnvg__convexFill (GLNVGcontext* gl, GLNVGcall* call) nothrow @trusted @nog
     glnvg__setUniforms(gl, call.uniformOffset, call.image);
     glnvg__checkError(gl, "convex fill");
     if (call.evenOdd) glDisable(GL_CULL_FACE);
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    foreach (int i; 0..npaths) if (paths[i].fillCount) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
     if (gl.flags&NVGContextFlag.Antialias) {
       // Draw fringes
-      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      foreach (int i; 0..npaths) if (paths[i].strokeCount) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
     }
     if (call.evenOdd) glEnable(GL_CULL_FACE);
   } else {
     glnvg__setClipUniforms(gl, call.uniformOffset, call.clipmode); // this activates our FBO
     glnvg__checkError(gl, "clip convex fill");
-    foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
+    foreach (int i; 0..npaths) if (paths[i].fillCount) glDrawArrays(GL_TRIANGLE_FAN, paths[i].fillOffset, paths[i].fillCount);
     if (gl.flags&NVGContextFlag.Antialias) {
       // Draw fringes
-      foreach (int i; 0..npaths) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
+      foreach (int i; 0..npaths) if (paths[i].strokeCount) glDrawArrays(GL_TRIANGLE_STRIP, paths[i].strokeOffset, paths[i].strokeCount);
     }
     glnvg__finishClip(gl, call.clipmode); // deactivate FBO, restore rendering state
   }
