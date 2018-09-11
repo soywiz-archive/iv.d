@@ -1300,22 +1300,22 @@ final:
       t = (x0-x1)/t;
       double r = (1-t)*((1-t)*y0+2.0*t*y1)+t*t*y2; // By(t=P4)
       t = (x0*x2-x1*x1)*t/(x0-x1); // gradient dP4/dx=0
-      x = lrintd(t); y = lrintd(r);
+      x = cast(int)lrintd(t); y = cast(int)lrintd(r);
       r = (y1-y0)*(t-x0)/(x1-x0)+y0; // intersect P3 | P0 P1
-      drawQuadBezierSeg(x0, y0, x, lrintd(r), x, y, fc);
+      drawQuadBezierSeg(x0, y0, x, cast(int)lrintd(r), x, y, fc);
       r = (y1-y2)*(t-x2)/(x1-x2)+y2; // intersect P4 | P1 P2
-      x0 = x1 = x; y0 = y; y1 = lrintd(r); // P0 = P4, P1 = P8
+      x0 = x1 = x; y0 = y; y1 = cast(int)lrintd(r); // P0 = P4, P1 = P8
     }
     // vertical cut at P6?
     if (cast(long)(y0-y1)*(y2-y1) > 0) {
       t = y0-2*y1+y2; t = (y0-y1)/t;
       double r = (1-t)*((1-t)*x0+2.0*t*x1)+t*t*x2; // Bx(t=P6)
       t = (y0*y2-y1*y1)*t/(y0-y1); // gradient dP6/dy=0
-      x = lrintd(r); y = lrintd(t);
+      x = cast(int)lrintd(r); y = cast(int)lrintd(t);
       r = (x1-x0)*(t-y0)/(y1-y0)+x0; // intersect P6 | P0 P1
-      drawQuadBezierSeg(x0, y0, lrintd(r), y, x, y, fc);
+      drawQuadBezierSeg(x0, y0, cast(int)lrintd(r), y, x, y, fc);
       r = (x1-x2)*(t-y2)/(y1-y2)+x2; // intersect P7 | P1 P2
-      x0 = x; x1 = lrintd(r); y0 = y1 = y; // P0 = P6, P1 = P7
+      x0 = x; x1 = cast(int)lrintd(r); y0 = y1 = y; // P0 = P6, P1 = P7
     }
     drawQuadBezierSeg(x0, y0, x1, y1, x2, y2, fc); // remaining part
   }
@@ -1341,8 +1341,8 @@ final:
       if (w < 0.5 && dy > dx) {
         // flat ellipse, algorithm fails
         cur = (w+1.0)/2.0; w = sqrtf(w); xy = 1.0/(w+1.0);
-        sx = lrintd((x0+2.0*w*x1+x2)*xy/2.0); // subdivide curve in half
-        sy = lrintd((y0+2.0*w*y1+y2)*xy/2.0);
+        sx = cast(int)lrintd((x0+2.0*w*x1+x2)*xy/2.0); // subdivide curve in half
+        sy = cast(int)lrintd((y0+2.0*w*y1+y2)*xy/2.0);
         dx = floord((w*x1+x0)*xy+0.5); dy = floord((y1*w+y0)*xy+0.5);
         drawQuadRationalBezierSeg(x0, y0, cast(int)dx, cast(int)dy, sx, sy, cur, fc);/* plot separately */
         dx = floord((w*x1+x2)*xy+0.5); dy = floord((y1*w+y2)*xy+0.5);
@@ -1369,8 +1369,8 @@ final:
     if (w != 0.0) w = (w-zd)/(w+w); // squared weight of P1
     assert(w <= 1.0 && w >= 0.0); // limit angle to |zd|<=xd*yd
     // snap xe,ye to int
-    xd = lrintf(xd*w);
-    yd = lrintf(yd*w);
+    xd = cast(int)lrintf(xd*w);
+    yd = cast(int)lrintf(yd*w);
     drawQuadRationalBezierSeg(x0, y0+yd, x0, y0, x0+xd, y0, 1.0-w, fc);
     drawQuadRationalBezierSeg(x0, y0+yd, x0, y1, x1-xd, y1, w, fc);
     drawQuadRationalBezierSeg(x1, y1-yd, x1, y1, x1-xd, y1, 1.0-w, fc);
@@ -1382,8 +1382,8 @@ final:
     float xd = cast(long)a*a, yd = cast(long)b*b;
     float s = sinf(angle), zd = (xd-yd)*s; // ellipse rotation
     xd = sqrtf(xd-zd*s), yd = sqrtf(yd+zd*s); // surrounding rectangle
-    a = lrintf(xd);
-    b = lrintf(yd);
+    a = cast(int)lrintf(xd);
+    b = cast(int)lrintf(yd);
     zd = zd*a*b/(xd*yd); // scale to integer
     drawRotatedEllipseRect(x-a, y-b, x+a, y+b, cast(long)(4*zd*cosf(angle)), fc);
   }
@@ -1498,8 +1498,8 @@ final:
       fx0 -= fx3;
       fy0 -= fy3;
       // scale bounds to int
-      x3 = lrintf(fx3);
-      y3 = lrintf(fy3);
+      x3 = cast(int)lrintf(fx3);
+      y3 = cast(int)lrintf(fy3);
       if (fx0 != 0.0f) { fx1 *= fx0 = (x0-x3)/fx0; fx2 *= fx0; }
       if (fy0 != 0.0f) { fy1 *= fy0 = (y0-y3)/fy0; fy2 *= fy0; }
       if (x0 != x3 || y0 != y3) drawCubicBezierSeg(x0, y0, x0+fx1, y0+fy1, x0+fx2, y0+fy2, x3, y3, fc); // segment t1 - t2
@@ -1546,8 +1546,8 @@ final:
       }
     }
 
-    int scaleX (float v) nothrow @trusted @nogc { pragma(inline, true); return lrintf(ofsx+v*scalex); }
-    int scaleY (float v) nothrow @trusted @nogc { pragma(inline, true); return lrintf(ofsy+v*scaley); }
+    int scaleX (float v) nothrow @trusted @nogc { pragma(inline, true); return cast(int)lrintf(ofsx+v*scalex); }
+    int scaleY (float v) nothrow @trusted @nogc { pragma(inline, true); return cast(int)lrintf(ofsy+v*scaley); }
 
     int cx = 0, cy = 0;
     while (ppos < plen) {

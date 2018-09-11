@@ -130,7 +130,7 @@ nothrow @trusted @nogc:
     else if (seconds) len = cast(uint)snprintf(buf.ptr, buf.length, "%u.%03u", seconds, milli);
     else if (micro != 0) len = cast(uint)snprintf(buf.ptr, buf.length, "%ums:%umcs", milli, micro);
     else len = cast(uint)snprintf(buf.ptr, buf.length, "%ums", milli);
-    if (len > dest.length) len = dest.length;
+    if (len > dest.length) len = cast(uint)dest.length;
     dest.ptr[0..len] = buf.ptr[0..len];
     return dest.ptr[0..len];
   }
