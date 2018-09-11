@@ -9120,9 +9120,8 @@ public enum FONSBitmapFlag : uint {
 public enum FONSError : int {
   NoError = 0,
   AtlasFull = 1, // Font atlas is full.
-  ScratchFull = 2, // Scratch memory used to render glyphs is full, requested size reported in 'val', you may need to bump up FONS_SCRATCH_BUF_SIZE.
-  StatesOverflow = 3, // Calls to fonsPushState has created too large stack, if you need deep state stack bump up FONS_MAX_STATES.
-  StatesUnderflow = 4, // Trying to pop too many states fonsPopState().
+  StatesOverflow = 2, // Calls to fonsPushState has created too large stack, if you need deep state stack bump up FONS_MAX_STATES.
+  StatesUnderflow = 3, // Trying to pop too many states fonsPopState().
 }
 
 /// Initial parameters for new FontStash.
@@ -10074,7 +10073,6 @@ bool fons__nvg__bounds (FONSttFontImpl* font, uint glyphidx, float[] bounds) not
 
 // ////////////////////////////////////////////////////////////////////////// //
 private:
-enum FONS_SCRATCH_BUF_SIZE = 64000;
 enum FONS_HASH_LUT_SIZE = 256;
 enum FONS_INIT_FONTS = 4;
 enum FONS_INIT_GLYPHS = 256;
@@ -10449,8 +10447,6 @@ private:
   int* hashidx; // [hsize] items; holds indicies in [fonts] array
   int hused, hsize;// used items and total items in [hashidx]
   FONSAtlas atlas;
-  ubyte* scratch;
-  int nscratch;
   FONSstate[FONS_MAX_STATES] states;
   int nstates;
 
@@ -10678,7 +10674,6 @@ private:
     if (atlas !is null) atlas.kill();
     if (fonts !is null) free(fonts);
     if (texData !is null) free(texData);
-    if (scratch !is null) free(scratch);
     if (hashidx !is null) free(hashidx);
   }
 
@@ -10720,7 +10715,6 @@ private:
     fons__tt_setMono(&this, &font.font, !defAA);
 
     // init font
-    nscratch = 0;
     if (!fons__tt_loadFont(&this, &font.font, fdata.data, fdata.dataSize)) {
       // we promised to not free data on error, so just clear the data store (it will be freed by the caller)
       font.fdata = null;
@@ -10793,10 +10787,6 @@ public:
     memcpy(&stash.params, &params, params.sizeof);
     if (stash.params.width < 1) stash.params.width = 32;
     if (stash.params.height < 1) stash.params.height = 32;
-
-    // allocate scratch buffer
-    stash.scratch = cast(ubyte*)malloc(FONS_SCRATCH_BUF_SIZE);
-    if (stash.scratch is null) goto error;
 
     // initialize implementation library
     if (!fons__tt_init(stash)) goto error;
@@ -11548,9 +11538,6 @@ public:
     if (iblur > 20) iblur = 20;
     int pad = iblur+2;
 
-    // Reset allocator.
-    nscratch = 0;
-
     // Find code point and size.
     uint h = fons__hashint(codepoint)&(FONS_HASH_LUT_SIZE-1);
     int i = font.lut.ptr[h];
@@ -11644,7 +11631,6 @@ public:
 
     // Blur
     if (iblur > 0) {
-      nscratch = 0;
       ubyte* bdst = &texData[glyph.x0+glyph.y0*params.width];
       fons__blur(bdst, gw, gh, params.width, iblur);
     }
@@ -11727,26 +11713,6 @@ public void kill (ref FONSContext stash) nothrow @trusted @nogc {
   stash.clear();
   free(stash);
   stash = null;
-}
-
-
-// ////////////////////////////////////////////////////////////////////////// //
-void* fons__tmpalloc (usize size, void* up) nothrow @trusted @nogc {
-  ubyte* ptr;
-  FONSContext stash = cast(FONSContext)up;
-  // 16-byte align the returned pointer
-  size = (size+0xf)&~0xf;
-  if (stash.nscratch+cast(int)size > FONS_SCRATCH_BUF_SIZE) {
-    if (stash.handleError !is null) stash.handleError(FONSError.ScratchFull, stash.nscratch+cast(int)size);
-    return null;
-  }
-  ptr = stash.scratch+stash.nscratch;
-  stash.nscratch += cast(int)size;
-  return ptr;
-}
-
-void fons__tmpfree (void* ptr, void* up) nothrow @trusted @nogc {
-  // empty
 }
 
 
