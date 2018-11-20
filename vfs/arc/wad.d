@@ -118,6 +118,8 @@ private:
     char[8] nbuf;
     string lastSeenMap; // last seen map header (ExMx or MAPxx, lowercased, serves as directory name)
     string curPath; // for start/end lumps
+    int[string] dupcount;
+    scope(exit) dupcount.clear();
     while (flCount-- > 0) {
       FileInfo fi;
       fi.ofs = fl.readNum!uint;
@@ -203,6 +205,7 @@ private:
           //if (ch == '/' && (nbpos == 0 || name.ptr[nbpos-1] == '/')) continue;
           name.ptr[nbpos++] = ch;
         }
+        name[nbpos] = 0;
         name = name[0..nbpos];
         if (name.length && name[$-1] == '/') name = null;
       }
@@ -211,7 +214,18 @@ private:
       if (fi.ofs+fi.size > flsize) throw new /*VFSNamedException!"WadArchive"*/VFSExceptionArc("invalid archive directory");
       if (name.length) {
         fi.name = cast(string)name; // it's safe here
-        dir.arrayAppendUnsafe(fi);
+        // names can be duplicated
+        if (auto dpp = fi.name in dupcount) {
+          char[64] buf;
+          import core.stdc.stdio : snprintf;
+          auto slen = snprintf(buf.ptr, buf.sizeof, ".%02d", *dpp);
+          fi.name ~= buf[0..slen];
+          dir.arrayAppendUnsafe(fi);
+          ++(*dpp);
+        } else {
+          dupcount[fi.name] = 1;
+          dir.arrayAppendUnsafe(fi);
+        }
       }
     }
     buildNameHashTable();
