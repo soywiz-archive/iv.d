@@ -643,6 +643,10 @@ private int editlinetext(bool text) (FuiContext ctx, int parent, const(char)[] i
             }
           }
         }
+        if (eld.ed.singleline && ev.key == "S-M-M") {
+          eld.ed.setNewText(`\s+([-+*/%^&|]|<<|>>)\s+`, false); // don't clear on type
+          return true;
+        }
         // editline
         if (eld.ed.processKey(ev.key)) {
           if (eld.actcb !is null) {
