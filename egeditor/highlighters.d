@@ -3009,7 +3009,10 @@ public EditorHL getHiglighterObjectFor (const(char)[] ext, const(char)[] fullnam
     if (toksvc is null) toksvc = new EdHiTokensVC();
     return new EditorHLExt(toksvc);
   }
-  if (ext.strEquCI(".frag") || ext.strEquCI(".vert") || ext.strEquCI(".shad") || ext.strEquCI(".shader")) {
+  if (ext.strEquCI(".frag") || ext.strEquCI(".vert") ||
+      ext.strEquCI(".shad") || ext.strEquCI(".shader") ||
+      ext.strEquCI(".fs") || ext.strEquCI(".vs"))
+  {
     __gshared EdHiTokensFrag tokf;
     if (tokf is null) tokf = new EdHiTokensFrag();
     return new EditorHLExt(tokf);
