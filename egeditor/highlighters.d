@@ -1752,6 +1752,7 @@ public class EdHiTokensVC : EdHiTokens {
     addToken("ubyte", HiType);
     addToken("array", HiType);
     addToken("state", HiType);
+    addToken("dictionary", HiType);
 
     // reserved, unused
     addToken("byte", HiInternal);
