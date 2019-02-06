@@ -36,6 +36,9 @@ version(Windows) {
   import core.stdc.math : lrintf;
 }
 
+//debug = xlay_line_flush;
+//debug = xlay_line_flush_ex;
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 
@@ -1266,8 +1269,8 @@ private:
         w.props = w.propsOrig;
         w.props.hyphen = false;
       }
-      LayLine* ln;
-      LayWord* w = words+curw;
+      LayLine *ln;
+      LayWord *w = words+curw;
       while (curw < endw) {
         debug(xlay_line_flush) conwriteln("  ", endw-curw, " words left");
         if (ln is null) {
@@ -1351,6 +1354,7 @@ private:
       foreach (uint lidx; stline..linesUsed) {
         debug(xlay_line_flush) conwriteln(": lidx=", lidx, "; wc=", lines[lidx].wordCount);
         layoutLine(lidx);
+        debug(xlay_line_flush_ex) conwriteln(": lidx=", lidx, "; wc=", lines[lidx].wordCount, "; y=", lines[lidx].y);
       }
     }
   }
