@@ -99,6 +99,7 @@ protected:
   }
 
   int repeatCounter = -1; // <0: not in counter typing
+  int repeatIteration; // 0...
   RepMode repeatMode; // <0: C-Space just pressed; >0: just started; 0: normal
   int[8] repeatStack;
   int repeatSP;
@@ -644,7 +645,7 @@ public:
     return pos;
   }
 
-  final void drawHiBracket (int pos, int lidx, char bch, char ech, int dir, bool drawline=false) {
+  final int drawHiBracket(bool dodraw=true) (int pos, int lidx, char bch, char ech, int dir, bool drawline=false) {
     enum LineScanPages = 8;
     int level = 1;
     auto ts = gb.textsize;
@@ -656,7 +657,7 @@ public:
       auto ch = gb[pos];
       if (ch == '\n') {
         lidx += dir;
-        if (lidx < toplimit || lidx >= botlimit) return;
+        if (lidx < toplimit || lidx >= botlimit) return -1;
         pos += dir;
         continue;
       }
@@ -668,69 +669,72 @@ public:
             int rx, ry;
             lc.pos2xyVT(pos, rx, ry);
             if (rx >= mXOfs || rx < mXOfs+winw) {
-              if (ry >= mTopLine && ry < mTopLine+winh) {
-                auto win = XtWindow(winx, winy, winw, winh);
-                win.color = BracketColor;
-                win.writeCharsAt(rx-mXOfs, ry-mTopLine, 1, ech);
-                markLinesDirty(ry, 1);
-              }
-              // draw line with opening bracket if it is out of screen
-              if (drawline && dir < 0 && ry < mTopLine) {
-                // line start
-                int ls = pos;
-                while (ls > 0 && gb[ls-1] != '\n') --ls;
-                // skip leading spaces
-                while (ls < pos && gb[ls] <= ' ') ++ls;
-                // line end
-                int le = pos+1;
-                while (le < ts && gb[le] != '\n') ++le;
-                // remove trailing spaces
-                while (le > pos && gb[le-1] <= ' ') --le;
-                if (ls < le) {
-                  auto win = XtWindow(winx+1, winy-1, winw-1, 1);
-                  win.color = XtColorFB!(TtyRgb2Color!(0x40, 0x40, 0x40), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
-                  win.writeCharsAt(0, 0, winw, ' ');
-                  int x = 0;
-                  while (x < winw && ls < le) {
-                    win.writeCharsAt(x, 0, 1, uni2koi(gb.uniAt(ls)));
-                    ls += gb.utfuckLenAt(ls);
-                    ++x;
+              static if (dodraw) {
+                if (ry >= mTopLine && ry < mTopLine+winh) {
+                  auto win = XtWindow(winx, winy, winw, winh);
+                  win.color = BracketColor;
+                  win.writeCharsAt(rx-mXOfs, ry-mTopLine, 1, ech);
+                  markLinesDirty(ry, 1);
+                }
+                // draw line with opening bracket if it is out of screen
+                if (drawline && dir < 0 && ry < mTopLine) {
+                  // line start
+                  int ls = pos;
+                  while (ls > 0 && gb[ls-1] != '\n') --ls;
+                  // skip leading spaces
+                  while (ls < pos && gb[ls] <= ' ') ++ls;
+                  // line end
+                  int le = pos+1;
+                  while (le < ts && gb[le] != '\n') ++le;
+                  // remove trailing spaces
+                  while (le > pos && gb[le-1] <= ' ') --le;
+                  if (ls < le) {
+                    auto win = XtWindow(winx+1, winy-1, winw-1, 1);
+                    win.color = XtColorFB!(TtyRgb2Color!(0x40, 0x40, 0x40), TtyRgb2Color!(0xb2, 0xb2, 0xb2)); // 0,7
+                    win.writeCharsAt(0, 0, winw, ' ');
+                    int x = 0;
+                    while (x < winw && ls < le) {
+                      win.writeCharsAt(x, 0, 1, uni2koi(gb.uniAt(ls)));
+                      ls += gb.utfuckLenAt(ls);
+                      ++x;
+                    }
+                  }
+                }
+                if (drawline) {
+                  // draw vertical line
+                  int stx, sty, ls;
+                  if (dir > 0) {
+                    // opening
+                    // has some text after the bracket on the starting line?
+                    //if (!lineHasOnlySpaces(stpos+1, 1)) return; // has text, can't draw
+                    // find first non-space at the starting line
+                    ls = lineFindFirstNonSpace(stpos);
+                  } else if (dir < 0) {
+                    // closing
+                    lc.pos2xyVT(stpos, rx, ry);
+                    ls = lineFindFirstNonSpace(pos);
+                  }
+                  lc.pos2xyVT(ls, stx, sty);
+                  if (stx == rx) {
+                    markLinesDirtySE(sty+1, ry-1);
+                    rx -= mXOfs;
+                    stx -= mXOfs;
+                    ry -= mTopLine;
+                    sty -= mTopLine;
+                    auto win = XtWindow(winx, winy, winw, winh);
+                    win.color = VLineColor;
+                    win.vline(stx, sty+1, ry-sty-1);
                   }
                 }
               }
-              if (drawline) {
-                // draw vertical line
-                int stx, sty, ls;
-                if (dir > 0) {
-                  // opening
-                  // has some text after the bracket on the starting line?
-                  //if (!lineHasOnlySpaces(stpos+1, 1)) return; // has text, can't draw
-                  // find first non-space at the starting line
-                  ls = lineFindFirstNonSpace(stpos);
-                } else if (dir < 0) {
-                  // closing
-                  lc.pos2xyVT(stpos, rx, ry);
-                  ls = lineFindFirstNonSpace(pos);
-                }
-                lc.pos2xyVT(ls, stx, sty);
-                if (stx == rx) {
-                  markLinesDirtySE(sty+1, ry-1);
-                  rx -= mXOfs;
-                  stx -= mXOfs;
-                  ry -= mTopLine;
-                  sty -= mTopLine;
-                  auto win = XtWindow(winx, winy, winw, winh);
-                  win.color = VLineColor;
-                  win.vline(stx, sty+1, ry-sty-1);
-                }
-              }
             }
-            return;
+            return pos;
           }
         }
       }
       pos += dir;
     }
+    return -1;
   }
 
   protected final void drawPartHighlight (int pos, int count, uint clr) {
@@ -1202,21 +1206,25 @@ public:
                 static if (is(ReturnType!mx == void)) {
                   comboCount = 0; // reset combo
                   static if (hasUDA!(mx, TEDRepeated)) {
-                    scope(exit) repeatCounter = -1; // reset counter
+                    scope(exit) { repeatCounter = -1; repeatIteration = 0; } // reset counter
                     if (repeatCounter < 0) repeatCounter = 1; // no counter means 1
-                    foreach (immutable _; 0..repeatCounter) mx();
+                    foreach (immutable rc; 0..repeatCounter) { repeatIteration = rc; mx(); }
                   } else {
                     static if (!hasUDA!(mx, TEDRepeatChar)) repeatCounter = -1;
                     mx();
                   }
                   return Ecc.Eaten;
                 } else {
+                  repeatIteration = 0;
                   static if (hasUDA!(mx, TEDRepeated)) {
                     if (repeatCounter != 0 && mx()) {
-                      scope(exit) repeatCounter = -1; // reset counter
+                      scope(exit) { repeatCounter = -1; repeatIteration = 0; } // reset counter
                       if (repeatCounter < 0) repeatCounter = 1; // no counter means 1
                       comboCount = 0; // reset combo
-                      foreach (immutable _; 1..repeatCounter) if (!mx()) break;
+                      foreach (immutable rc; 1..repeatCounter) {
+                        repeatIteration = rc;
+                        if (!mx()) break;
+                      }
                       return Ecc.Eaten;
                     }
                   } else {
@@ -2157,6 +2165,36 @@ final:
     gotoPos(curpos+xpos);
   }
 
+  int doJumpBracketLastDir = 0; // for iterations
+
+  void doJumpBracket () {
+    if (repeatIteration == 0) doJumpBracketLastDir = 0;
+    int curdir;
+    auto pos = curpos;
+    int newpos = -1;
+    while (pos >= 0 && pos < gb.textsize) {
+      newpos = -1;
+      //if (!isAnyTextChar(pos, false)) return;
+      auto ch = gb[pos];
+           if (ch == '(') { newpos = drawHiBracket!false(pos, cy, ch, ')', 1); curdir = 1; }
+      else if (ch == '{') { newpos = drawHiBracket!false(pos, cy, ch, '}', 1, true); curdir = 1; }
+      else if (ch == '[') { newpos = drawHiBracket!false(pos, cy, ch, ']', 1); curdir = 1; }
+      else if (ch == ')') { newpos = drawHiBracket!false(pos, cy, ch, '(', -1); curdir = -1; }
+      else if (ch == '}') { newpos = drawHiBracket!false(pos, cy, ch, '{', -1, true); curdir = -1; }
+      else if (ch == ']') { newpos = drawHiBracket!false(pos, cy, ch, '[', -1); curdir = -1; }
+      else {
+        if (doJumpBracketLastDir == 0) return;
+        pos += doJumpBracketLastDir;
+        continue;
+      }
+      if (doJumpBracketLastDir != 0 && curdir == doJumpBracketLastDir) break;
+      if (doJumpBracketLastDir == 0) { doJumpBracketLastDir = curdir; break; }
+      pos += doJumpBracketLastDir;
+    }
+    if (newpos >= 0) gotoPos(newpos);
+  }
+
+
 final:
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("Up", q{ doUp(); });
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-Up", q{ doUp(true); });
@@ -2166,6 +2204,8 @@ final:
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-Down", q{ doDown(true); });
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("C-Down", q{ doScrollDown(); });
   @TEDMultiOnly @TEDRepeated mixin TEDImpl!("S-C-Down", q{ doScrollDown(true); });
+
+  @TEDRepeated mixin TEDImpl!("C-]", q{ doJumpBracket(); });
 
   @TEDRepeated mixin TEDImpl!("Left", q{ doLeft(); });
   @TEDRepeated mixin TEDImpl!("S-Left", q{ doLeft(true); });
