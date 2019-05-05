@@ -374,10 +374,10 @@ public void glconDraw () {
   // restore on exit
   scope(exit) {
     glPopAttrib(/*GL_ENABLE_BIT*/);
-    glMatrixMode(GL_PROJECTION); glPopMatrix();
-    glMatrixMode(GL_MODELVIEW); glPopMatrix();
-    glMatrixMode(GL_TEXTURE); glPopMatrix();
     glMatrixMode(GL_COLOR); glPopMatrix();
+    glMatrixMode(GL_TEXTURE); glPopMatrix();
+    glMatrixMode(GL_MODELVIEW); glPopMatrix();
+    glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(glmatmode);
     if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT, oldfbr);
     if (glHasFunc!"glBindFramebufferEXT") glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT, oldfbw);

@@ -2058,7 +2058,7 @@ nothrow @safe:
     res.mt.ptr[12] = -(right+left)/(right-left);
     res.mt.ptr[13] = -(top+bottom)/(top-bottom);
     res.mt.ptr[14] = -(farVal+nearVal)/(farVal-nearVal);
-    return mat;
+    return res;
   }
 
   // same as `gluPerspective()`
@@ -2072,7 +2072,7 @@ nothrow @safe:
     mixin(ImportCoreMath!(Float, "tan"));
     immutable Float fH = cast(Float)(tan(fovY/360*PI)*zNear);
     immutable Float fW = cast(Float)(fH*aspect);
-    return frustum(-fW, fW, -fH, fH, zNear, zFar);
+    return Frustum(-fW, fW, -fH, fH, zNear, zFar);
   }
 
 public:

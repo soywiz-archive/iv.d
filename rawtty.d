@@ -345,7 +345,7 @@ int ttyReadKeyByte (int toMSec=-1) @trusted @nogc {
 public align(1) struct TtyEvent {
 align(1): // make it tightly packed
   ///
-  enum Key : ubyte{
+  enum Key : ubyte {
     None, ///
     Error, /// error reading key
     Unknown, /// can't interpret escape code
