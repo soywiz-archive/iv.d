@@ -1644,6 +1644,8 @@ public class EdHiTokensVC : EdHiTokens {
       0
     );
 
+    addToken("assert", HiKeywordHi);
+
     addToken("alias", HiKeyword);
     addToken("auto", HiKeyword);
     addToken("bitenum", HiKeyword);
