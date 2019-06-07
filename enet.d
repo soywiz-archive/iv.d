@@ -3143,8 +3143,9 @@ extern(C) nothrow {
 
 
   private void enet_protocol_remove_sent_unreliable_commands (ENetPeer* peer) {
-    ENetOutgoingCommand * outgoingCommand;
-    while (!enet_list_empty(&peer.sentUnreliableCommands)) {
+    ENetOutgoingCommand *outgoingCommand;
+    if (enet_list_empty(&peer.sentUnreliableCommands)) return;
+    do {
       outgoingCommand = cast(ENetOutgoingCommand*)enet_list_front(&peer.sentUnreliableCommands);
       enet_list_remove(&outgoingCommand.outgoingCommandList);
       if (outgoingCommand.packet !is null) {
@@ -3155,12 +3156,19 @@ extern(C) nothrow {
         }
       }
       enet_free(outgoingCommand);
+    } while (!enet_list_empty(&peer.sentUnreliableCommands));
+    if (peer.state == ENET_PEER_STATE_DISCONNECT_LATER &&
+        enet_list_empty(&peer.outgoingReliableCommands) &&
+        enet_list_empty(&peer.outgoingUnreliableCommands) &&
+        enet_list_empty(&peer.sentReliableCommands))
+    {
+      enet_peer_disconnect(peer, peer.eventData);
     }
   }
 
 
   private ENetProtocolCommand enet_protocol_remove_sent_reliable_command (ENetPeer* peer, enet_uint16 reliableSequenceNumber, enet_uint8 channelID) {
-    ENetOutgoingCommand* outgoingCommand = null;
+    ENetOutgoingCommand *outgoingCommand = null;
     ENetListIterator currentCommand;
     ENetProtocolCommand commandNumber;
     int wasSent = 1;
@@ -4054,8 +4062,11 @@ extern(C) nothrow {
     host.commandCount = command-host.commands.ptr;
     host.bufferCount = buffer-host.buffers.ptr;
 
-    if (peer.state == ENET_PEER_STATE_DISCONNECT_LATER && enet_list_empty(&peer.outgoingReliableCommands) &&
-        enet_list_empty(&peer.outgoingUnreliableCommands) && enet_list_empty(&peer.sentReliableCommands))
+    if (peer.state == ENET_PEER_STATE_DISCONNECT_LATER &&
+        enet_list_empty(&peer.outgoingReliableCommands) &&
+        enet_list_empty(&peer.outgoingUnreliableCommands) &&
+        enet_list_empty(&peer.sentReliableCommands) &&
+        enet_list_empty(&peer.sentUnreliableCommands))
     {
       enet_peer_disconnect(peer, peer.eventData);
     }
