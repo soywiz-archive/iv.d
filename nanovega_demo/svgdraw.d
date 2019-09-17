@@ -233,6 +233,7 @@ void main (string[] args) {
   bool contextAA = true;
   bool maxSize = false;
   string fname;
+  float userscale = 1;
   for (usize idx = 1; idx < args.length; ++idx) {
     import std.conv : to;
     string a = args[idx];
@@ -247,6 +248,10 @@ void main (string[] args) {
       if (d == 'w') defw = minw = to!int(a); else defh = minh = to!int(a);
     } else if (a.length > 2 && a[0] == '0' && (a[1] == 'w' || a[1] == 'h')) {
       if (a[1] == 'w') defw = minw = to!int(a); else defh = minh = to!int(a);
+    } else if (a == "--scale") {
+      ++idx;
+      if (idx >= args.length) assert(0, "out of args");
+      userscale = to!float(args[idx]);
     } else if (a == "--width") {
       ++idx;
       if (idx >= args.length) assert(0, "out of args");
@@ -329,7 +334,7 @@ void main (string[] args) {
   printf("size: %f x %f\n", cast(double)svg.width, cast(double)svg.height);
   GWidth = cast(int)svg.width+addw;
   GHeight = cast(int)svg.height+addh;
-  float scale = 1;
+  float scale = userscale;
 
   enum MaxWidth = 1900;
   enum MaxHeight = 1100;
