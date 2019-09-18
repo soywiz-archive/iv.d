@@ -1054,7 +1054,11 @@ protected:
 
   override bool flush () {
     if (fl is null) return false;
-    return (core.stdc.stdio.fflush(fl) == 0);
+    if (core.stdc.stdio.fflush(fl) == 0) return true;
+    // check for special file
+    import core.stdc.errno;
+    if (errno == EROFS || errno == EINVAL) return true; // this is pipe, fifo, socket, etc., assume success
+    return false;
   }
 }
 
@@ -1338,7 +1342,11 @@ protected:
   override bool flush () {
     import core.sys.posix.unistd : fdatasync;
     if (fd < 0) return false;
-    return (fdatasync(fd) != -1);
+    if (fdatasync(fd) == 0) return true;
+    // check for special file
+    import core.stdc.errno;
+    if (errno == EROFS || errno == EINVAL) return true; // this is pipe, fifo, socket, etc., assume success
+    return false;
   }
 }
 
