@@ -3383,7 +3383,12 @@ public:
   }
 
   ///
-  bool doBlockWrite (const(char)[] fname) { return doBlockWrite(VFile(fname, "w")); }
+  bool doBlockWrite (const(char)[] fname) {
+    killTextOnChar = false;
+    if (!hasMarkedBlock) return true;
+    if (bend-bstart <= 0) return true;
+    return doBlockWrite(VFile(fname, "w"));
+  }
 
   ///
   bool doBlockWrite (VFile fl) {
