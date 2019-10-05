@@ -1949,10 +1949,15 @@ final:
     return true;
   }
 
-  // skip current line
   int vchGotoLineStart (int pos) {
-    if (pos < 0) return 0;
+    if (pos <= 0) return 0;
     while (pos > 0 && gb[pos-1] != '\n') --pos;
+    return pos;
+  }
+
+  int vchGotoLineEnd (int pos) {
+    if (pos <= 0) pos = 0;
+    while (pos < gb.textsize && gb[pos] != '\n') ++pos;
     return pos;
   }
 
@@ -1963,25 +1968,51 @@ final:
 
   // skip current line
   int vchGotoSkipLine (int pos) {
-    // go to line end
-    while (pos < gb.textsize && gb[pos] != '\n') --pos;
+    pos = vchGotoLineEnd(pos);
     // skip '\n'
     if (pos < gb.textsize) ++pos;
     return pos;
   }
 
-  // good comment for VaVoom header?
-  bool isCurLineAGoodVCHComment (int pos) {
+  // is empty single-line comment?
+  // returns:
+  //  -1 for "not a comment"
+  //   0 for "comment with data"
+  //   1 for empty single-line comment
+  int isLineAtPosASingleLineVCHComment (int pos) {
     pos = vchGotoLineStart(pos);
     // skip blanks
     while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
     // check for single-line comment
-    if (pos+2 >= gb.textsize) return false;
-    if (gb[pos] != '/' || gb[pos+1] != '/' || gb[pos+2] == '/') return false;
+    if (pos+2 > gb.textsize) return -1;
+    if (gb[pos] != '/' || gb[pos+1] != '/') return -1;
+    if (pos+2 == gb.textsize) return 1;
+    if (gb[pos+2] == '/') return -1;
     pos += 2; // skip comment
     // check if we have any non-blank chars in it
     while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
-    return (pos < gb.textsize && gb[pos] > ' ');
+    return (pos >= gb.textsize || gb[pos] == '\n' ? 1 : 0);
+  }
+
+  // good comment for Vavoom header?
+  bool isLineAtPosAGoodVCHComment (int pos) {
+    pos = vchGotoLineStart(pos);
+    // skip blanks
+    while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
+    // check for single-line comment
+    if (pos+2 > gb.textsize) return false;
+    if (gb[pos] != '/' || gb[pos+1] != '/') return false;
+    if (pos+2 == gb.textsize) return true;
+    if (gb[pos+2] == '/') return false;
+    pos += 2; // skip comment
+    // check if we have any non-blank chars in it
+    while (pos < gb.textsize && gb[pos] != '\n' && gb[pos] <= ' ') ++pos;
+    if (pos >= gb.textsize) return true; // dunno
+    if (gb[pos] != '\n' || pos == 2) return true; // non-empty
+    // for empty comments, allow only one single line (so check the previous line)
+    // if previous line is "comment with data", allow this empty line
+    pos = vchGotoPrevLine(pos);
+    return (isLineAtPosASingleLineVCHComment(pos) == 0);
   }
 
   // remove extra blanks (and insert required blanks) to good comment
@@ -1995,17 +2026,21 @@ final:
     // skip '//'
     pos = curpos+2;
     // we should have exactly two spaces after '//'
-    if (gb[pos] > ' ') {
+    if (gb[pos] > ' ' || gb[pos] == '\n') {
       // insert two
-      insertText!("end", false)(pos, "  ");
-    } else if (gb[pos+1] > ' ') {
+      if (gb[pos] != '\n') insertText!("end", false)(pos, "  ");
+    } else if (gb[pos+1] > ' ' || gb[pos+1] == '\n') {
       // insert one
-      insertText!("end", false)(pos+1, " ");
-    } else if (gb[pos+2] <= ' ') {
+      if (gb[pos+1] != '\n') {
+        insertText!("end", false)(pos+1, " ");
+      } else {
+        deleteText!"start"(pos, 1);
+      }
+    } else if (gb[pos+2] <= ' ' && gb[pos+2] != '\n') {
       // have more remove extra
       pos += 2;
       int epos = pos+1;
-      while (gb[epos] <= ' ') ++epos;
+      while (gb[epos] <= ' ' && gb[epos] != '\n') ++epos;
       deleteText!"start"(pos, epos-pos);
     }
     // skip line
@@ -2022,9 +2057,52 @@ final:
     return true;
   }
 
-  void doGenVaVoomCmt () {
+  // position cursor at single-line comment group
+  // basically, just inserts "//***"
+  void doGenVavoomRegionCmt () {
+    auto pos = vchGotoLineStart(curpos);
+    if (!isLineAtPosAGoodVCHComment(pos)) { ttyBeep(); return; } // invalid
+    // find group start
+    auto lastgoodpos = pos;
+    while (pos > 0 && isLineAtPosAGoodVCHComment(pos)) {
+      lastgoodpos = pos;
+      pos = vchGotoLineStart(vchGotoPrevLine(pos));
+    }
+    pos = lastgoodpos;
+    bool insertSecond = (isLineAtPosASingleLineVCHComment(pos) == 0);
+    // start undo group, so undo will remove the whole header at once
+    undoGroupStart();
+    scope(exit) undoGroupEnd();
+    // create cutline
+    char[] cutline;
+    scope(exit) delete cutline;
+    cutline.reserve(80);
+    cutline ~= "//";
+    while (cutline.length < 76) cutline ~= '*';
+    cutline ~= '\n';
+    // insert starting cutline
+    gotoPos(pos);
+    doPutText(cutline);
+    // insert second line
+    if (insertSecond) doPutText("//\n");
+    // go to the end, and insert closing cutlines
+    pos = curpos;
+    bool prevWasEmpty = true;
+    while (pos < gb.textsize && isLineAtPosAGoodVCHComment(pos)) {
+      prevWasEmpty = (isLineAtPosASingleLineVCHComment(pos) > 0);
+      pos = vchGotoSkipLine(pos);
+    }
+    gotoPos(pos);
+    if (!prevWasEmpty) doPutText("//\n");
+    doPutText(cutline);
+    // leave cursor here
+  }
+
+  // position cursor at function/method name
+  // this converts single-line comments
+  void doGenVavoomCmt () {
     auto pos = curpos;
-    if (isCurLineAGoodVCHComment(pos)) { ttyBeep(); return; } // invalid
+    if (isLineAtPosAGoodVCHComment(pos)) { ttyBeep(); return; } // invalid
     // find identifier start (including '::' for shitpp)
     while (pos >= 0) {
       if (gb[pos] == ':') {
@@ -2087,7 +2165,6 @@ final:
     // start undo group, so undo will remove the whole header at once
     undoGroupStart();
     scope(exit) undoGroupEnd();
-    bool closeGroup = false;
     // move to line start (and save xpos)
     while (pos > 0 && gb[pos-1] != '\n') --pos;
     int xpos = curpos-pos;
@@ -2100,7 +2177,7 @@ final:
     while (cutline.length < 76) cutline ~= '=';
     cutline ~= '\n';
     // skip good comments that we will add to header
-    while (curpos > 0 && isCurLineAGoodVCHComment(vchGotoPrevLine(curpos))) {
+    while (curpos > 0 && isLineAtPosAGoodVCHComment(vchGotoPrevLine(curpos))) {
       gotoPos(vchGotoPrevLine(curpos));
     }
     // insert cutline (no indent)
@@ -2113,8 +2190,8 @@ final:
     // finish third line, insert fourth line
     doPutText("\n//\n");
     // skip and normalize good comments
-    if (isCurLineAGoodVCHComment(curpos)) {
-      while (isCurLineAGoodVCHComment(curpos)) fixAGoodVCHCommentAndSkipIt();
+    if (isLineAtPosAGoodVCHComment(curpos)) {
+      while (isLineAtPosAGoodVCHComment(curpos)) fixAGoodVCHCommentAndSkipIt();
       // and insert "nice line"
       doPutText("//\n");
     }
@@ -2145,7 +2222,6 @@ final:
     // start undo group, so undo will remove the whole header at once
     undoGroupStart();
     scope(exit) undoGroupEnd();
-    bool closeGroup = false;
     // move to line start (and save xpos)
     while (pos > 0 && gb[pos-1] != '\n') --pos;
     int xpos = curpos-pos;
@@ -2354,9 +2430,13 @@ final:
     doNextIncSearch();
   });
 
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-H", "generate VaVoom function header comment", q{ doGenVaVoomCmt(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-H", "generate Vavoom function header comment", q{ doGenVavoomCmt(); });
   // hack for idiotic terminal mapping
-  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q Backspace", "generate VaVoom function header comment", q{ doGenVaVoomCmt(); });
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q Backspace", "generate Vavoom function header comment", q{ doGenVavoomCmt(); });
+
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-X C-H", "generate Vavoom region header comment", q{ doGenVavoomRegionCmt(); });
+  // hack for idiotic terminal mapping
+  @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-X Backspace", "generate Vavoom region header comment", q{ doGenVavoomRegionCmt(); });
 
   @TEDMultiOnly @TEDEditOnly mixin TEDImpl!("C-Q C-M", "put comment tearline", q{ doGenCmtTearLine(); });
   // hack for idiotic terminal mapping
@@ -2368,7 +2448,7 @@ final:
     if (tsz > 0 && tsz <= 64) tabsize = cast(ubyte)tsz;
   });
 
-  @TEDMultiOnly mixin TEDImpl!("C-Q C-X", "toggle syntax highlighing", q{ toggleHighlighting(); });
+  @TEDMultiOnly mixin TEDImpl!("C-Q C-X C-S", "toggle syntax highlighing", q{ toggleHighlighting(); });
 
   @TEDMultiOnly @TEDROOnly @TEDRepeated mixin TEDImpl!("Space", q{ doPageDown(); });
   @TEDMultiOnly @TEDROOnly @TEDRepeated mixin TEDImpl!("C-Space", q{ doPageUp(); });
