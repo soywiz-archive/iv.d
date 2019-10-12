@@ -2113,6 +2113,9 @@ final:
           if (gb[pos] == '~') {
             if (pos < 3 || gb[pos-1] != ':' || gb[pos-2] != ':') break;
             pos -= 1; // skip to '::' start (the following `--` will do the second move)
+          } else if (pos > 0 && gb[pos] == '.') {
+            // pascal
+            if (!isShitPPWordChar(gb[pos-1])) break;
           } else {
             break;
           }
@@ -2132,6 +2135,9 @@ final:
           if (gb[epos] == '~') {
             if (epos < 3 || gb[epos-1] != ':' || gb[epos-2] != ':') break;
             epos += 1; // skip to '::' end (the following `++` will do the second move)
+          } else if (epos+1 < gb.textsize && gb[epos] == '.') {
+            // pascal
+            if (!isShitPPWordChar(gb[epos+1])) break;
           } else {
             break;
           }
