@@ -170,7 +170,7 @@ uint tox_version_minor() @nogc;
  * The patch or revision number. Incremented when bugfixes are applied without
  * changing any functionality or API or ABI.
  */
-enum TOX_VERSION_PATCH = 9;
+enum TOX_VERSION_PATCH = 10;
 uint tox_version_patch() @nogc;
 
 /**
@@ -2518,6 +2518,25 @@ bool tox_conference_offline_peer_get_public_key(const(Tox)* tox, uint conference
  * Return a unix-time timestamp of the last time offline_peer_number was seen to be active.
  */
 ulong tox_conference_offline_peer_get_last_active(const(Tox)* tox, uint conference_number, uint offline_peer_number, TOX_ERR_CONFERENCE_PEER_QUERY *error) @nogc;
+
+alias TOX_ERR_CONFERENCE_SET_MAX_OFFLINE = int;
+enum : int {
+    /**
+     * The function returned successfully.
+     */
+    TOX_ERR_CONFERENCE_SET_MAX_OFFLINE_OK,
+
+    /**
+     * The conference number passed did not designate a valid conference.
+     */
+    TOX_ERR_CONFERENCE_SET_MAX_OFFLINE_CONFERENCE_NOT_FOUND,
+}
+
+/**
+ * Set maximum number of offline peers to store, overriding the default.
+ */
+bool tox_conference_set_max_offline(Tox *tox, uint conference_number, uint max_offline_peers,
+                                    TOX_ERR_CONFERENCE_SET_MAX_OFFLINE *error) @nogc;
 
 
 alias TOX_ERR_CONFERENCE_INVITE = int;
