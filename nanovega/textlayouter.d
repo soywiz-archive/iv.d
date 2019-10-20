@@ -434,8 +434,9 @@ align(1):
   short paraPad; /// to not recalcuate it on each relayouting; set to -1 to recalculate ;-)
   /// returns `-1` if this is not an object
   @property int objectIdx () const pure nothrow @safe @nogc => (propsOrig.obj ? wstart : -1);
-  @property bool expander () const pure nothrow @safe @nogc => propsOrig.expander;
-  @property bool hardspace () const pure nothrow @safe @nogc => propsOrig.hardspace;
+  @property bool expander () const pure nothrow @safe @nogc => propsOrig.expander; ///
+  @property bool hardspace () const pure nothrow @safe @nogc => propsOrig.hardspace; ///
+  usize udata; /// used-defined data, won't be touched by the engine
 }
 
 
@@ -917,6 +918,10 @@ public:
   /// end current paragraph
   void endPara () nothrow @trusted @nogc => put(EndParaCh);
 
+  /// end current word
+  /// can be called to ensure that last word is put into text
+  void endWord () nothrow @trusted @nogc => flushWord();
+
   /// put non-breaking space
   void putNBSP () nothrow @trusted @nogc => put(NBSpaceCh);
 
@@ -1097,6 +1102,7 @@ public:
 
   /// remove `count` words from index `idx`.
   /// you will need to call `finalize()` or forced relayouting after this.
+  /// make sure to clear `udata` in deleted words
   void removeWordsAt (uint idx, int count) nothrow @trusted @nogc {
     flushWord();
     lastWasSoftHypen = false;
@@ -1196,6 +1202,7 @@ private:
     if (w.style.fontface < 0) assert(0, "invalid font face in word style");
     laf.font = w.style;
     w.w = w.wsp = w.whyph = 0;
+    w.udata = 0;
     // calculate ascent, descent and height
     {
       int a, d, h;
