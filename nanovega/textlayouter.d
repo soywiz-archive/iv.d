@@ -920,7 +920,14 @@ public:
 
   /// end current word
   /// can be called to ensure that last word is put into text
-  void endWord () nothrow @trusted @nogc => flushWord();
+  void endWord (bool spaced=true) nothrow @trusted @nogc {
+    if (hasWordChars) {
+      flushWord();
+      auto lw = words+wordsUsed-1;
+      lw.propsOrig.canbreak = true;
+      lw.propsOrig.spaced = spaced;
+    }
+  }
 
   /// put non-breaking space
   void putNBSP () nothrow @trusted @nogc => put(NBSpaceCh);
